@@ -36,8 +36,9 @@ func main() {
 	log.Printf("the trade result : %v \n err: %v", result, err)
 	log.Println(newOb.GetOrderInfos())
 
+	cancelOrderId := model.OrderId(2)
 	result, err = newOb.AddOrder(model.Order{
-		ID:                2,
+		ID:                cancelOrderId,
 		Side:              model.BID,
 		Price:             9_000,
 		InitialQuantity:   10,
@@ -62,11 +63,19 @@ func main() {
 	log.Printf("the trade result : %+v \n err: %v", result, err)
 	log.Println(newOb.GetOrderInfos())
 
-}
+	result, err = newOb.ModifyOrder(model.OrderModify{
+		ID:       cancelOrderId,
+		Side:     model.BID,
+		Price:    10_000,
+		Quantity: 10,
+	}, model.ORDER_GOOD_TILL_CANCEL)
+	log.Printf("the trade result : %+v \n err: %v", result, err)
+	log.Println(newOb.GetOrderInfos())
 
-// func printSliceOfPointers(args []*any) {
-// 	res := ""
-// 	for i, e := range args {
-// 		fmt.Append(res, i)
-// 	}
-// }
+	err = newOb.CancelOrder(cancelOrderId)
+
+	//should have only bids
+	log.Printf("cancel the result err: %v", err)
+	log.Println(newOb.GetOrderInfos())
+
+}
