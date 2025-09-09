@@ -5,28 +5,63 @@ import (
 )
 
 type Order struct {
-	ID                OrderId
-	Side              Side // BUY or SELL
-	Price             Price
-	InitialQuantity   Quantity
-	RemainingQuantity Quantity
-	Type              OrderType
+	id                OrderId
+	side              Side // BUY or SELL
+	price             Price
+	initialQuantity   Quantity
+	remainingQuantity Quantity
+	orderType         OrderType
+}
+
+func NewOrder(id OrderId, side Side, price Price, quantity Quantity, orderType OrderType) Order {
+	return Order{
+		id:                id,
+		side:              side,
+		price:             price,
+		initialQuantity:   quantity,
+		remainingQuantity: quantity,
+		orderType:         orderType,
+	}
 }
 
 func (o *Order) GetFilledQuantity() Quantity {
-	return o.InitialQuantity - o.RemainingQuantity
+	return o.initialQuantity - o.remainingQuantity
 }
 
 func (o *Order) Fill(quantity Quantity) error {
-	if quantity > o.RemainingQuantity {
-		return fmt.Errorf("order cannot be filled for more than its remaining quantity %d", o.ID)
+	if quantity > o.remainingQuantity {
+		return fmt.Errorf("order cannot be filled for more than its remaining quantity %d", o.id)
 	}
-	o.RemainingQuantity -= quantity
+	o.remainingQuantity -= quantity
 	return nil
 }
 
 func (o *Order) IsFilled() bool {
-	return o.RemainingQuantity == 0
+	return o.remainingQuantity == 0
+}
+
+func (o *Order) GetRemainingQuantity() Quantity {
+	return o.remainingQuantity
+}
+
+func (o *Order) GetPrice() Price {
+	return o.price
+}
+
+func (o *Order) GetId() OrderId {
+	return o.id
+}
+
+func (o *Order) GetType() OrderType {
+	return o.orderType
+}
+
+func (o *Order) GetSide() Side {
+	return o.side
+}
+
+func (o *Order) GetInitialQuantity() Quantity {
+	return o.initialQuantity
 }
 
 type OrderModify struct {
@@ -37,14 +72,13 @@ type OrderModify struct {
 }
 
 func (om *OrderModify) ToOrder(orderType OrderType) Order {
-	return Order{
-		ID:                om.ID,
-		Side:              om.Side,
-		Price:             om.Price,
-		InitialQuantity:   om.Quantity,
-		RemainingQuantity: om.Quantity,
-		Type:              orderType,
-	}
+	return NewOrder(
+		om.ID,
+		om.Side,
+		om.Price,
+		om.Quantity,
+		orderType,
+	)
 }
 
 type Price int64

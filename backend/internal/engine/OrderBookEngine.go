@@ -20,7 +20,7 @@ type OrderBookEngine interface {
 	GetOrderInfos() *model.MarketDepth
 }
 
-type OrderBookEngineImpl struct {
+type orderBookEngineImpl struct {
 	bids, asks *btree.BTree                   // price-level trees
 	orders     map[model.OrderId]*model.Order // lookup by ID
 }
@@ -55,7 +55,7 @@ func popFrontInPlace[T any](slice *[]T) T {
 	return item
 }
 
-func (o *OrderBookEngineImpl) canMatch(side model.Side, price model.Price) bool {
+func (o *orderBookEngineImpl) canMatch(side model.Side, price model.Price) bool {
 	if side == model.BID {
 		if o.asks.Len() == 0 {
 			return false
@@ -72,7 +72,7 @@ func (o *OrderBookEngineImpl) canMatch(side model.Side, price model.Price) bool 
 	return price <= bestBids
 }
 
-func (o *OrderBookEngineImpl) matchOrder() []*model.Trade {
+func (o *orderBookEngineImpl) matchOrder() []*model.Trade {
 	trades := make([]*model.Trade, 0)
 	for {
 		if o.bids.Len() == 0 || o.asks.Len() == 0 {
@@ -91,25 +91,25 @@ func (o *OrderBookEngineImpl) matchOrder() []*model.Trade {
 			askOrder := asksPriceLevel.Orders[0]
 			bidOrder := bidsPriceLevel.Orders[0]
 
-			bestQuantity := min(askOrder.RemainingQuantity, bidOrder.RemainingQuantity)
-			bestPrice := min(askOrder.Price, bidOrder.Price)
+			bestQuantity := min(askOrder.GetRemainingQuantity(), bidOrder.GetRemainingQuantity())
+			bestPrice := min(askOrder.GetPrice(), bidOrder.GetPrice())
 			askOrder.Fill(bestQuantity)
 			bidOrder.Fill(bestQuantity)
 
 			trades = append(trades, &model.Trade{
-				MakerID:  askOrder.ID,
-				TakerID:  bidOrder.ID,
+				MakerID:  askOrder.GetId(),
+				TakerID:  bidOrder.GetId(),
 				Price:    bestPrice,
 				Quantity: bestQuantity,
 			})
 
 			if askOrder.IsFilled() {
-				delete(o.orders, askOrder.ID)
+				delete(o.orders, askOrder.GetId())
 				asksPriceLevel.Orders = asksPriceLevel.Orders[1:] // Pop front
 				asksPriceLevel.TotalVolume -= bestQuantity
 			}
 			if bidOrder.IsFilled() {
-				delete(o.orders, bidOrder.ID)
+				delete(o.orders, bidOrder.GetId())
 				bidsPriceLevel.Orders = bidsPriceLevel.Orders[1:]
 				bidsPriceLevel.TotalVolume -= bestQuantity
 
@@ -129,7 +129,7 @@ func (o *OrderBookEngineImpl) matchOrder() []*model.Trade {
 	if o.asks.Len() > 0 {
 		asksPriceLevel := o.asks.Min().(*orderbookModel.AskPriceLevel)
 		askOrder := asksPriceLevel.Orders[0]
-		if askOrder.Type == model.ORDER_FILL_AND_KILL {
+		if askOrder.GetType() == model.ORDER_FILL_AND_KILL {
 			//cancel order
 		}
 	}
@@ -137,7 +137,7 @@ func (o *OrderBookEngineImpl) matchOrder() []*model.Trade {
 		bidsPriceLevel := o.bids.Min().(*orderbookModel.BidPriceLevel)
 
 		bidOrder := bidsPriceLevel.Orders[0]
-		if bidOrder.Type == model.ORDER_FILL_AND_KILL {
+		if bidOrder.GetType() == model.ORDER_FILL_AND_KILL {
 			//cancel order
 		}
 	}
@@ -145,21 +145,21 @@ func (o *OrderBookEngineImpl) matchOrder() []*model.Trade {
 	return trades
 }
 
-func (o *OrderBookEngineImpl) AddOrder(order model.Order) ([]*model.Trade, error) {
-	_, ok := o.orders[order.ID]
+func (o *orderBookEngineImpl) AddOrder(order model.Order) ([]*model.Trade, error) {
+	_, ok := o.orders[order.GetId()]
 	if ok {
-		return []*model.Trade{}, fmt.Errorf("order already exist for id %d", order.ID)
+		return []*model.Trade{}, fmt.Errorf("order already exist for id %d", order.GetId())
 	}
 
-	if order.Type == model.ORDER_FILL_AND_KILL && !o.canMatch(order.Side, order.Price) {
-		return []*model.Trade{}, fmt.Errorf("cannot fill and kill at that price for order id %d", order.ID)
+	if order.GetType() == model.ORDER_FILL_AND_KILL && !o.canMatch(order.GetSide(), order.GetPrice()) {
+		return []*model.Trade{}, fmt.Errorf("cannot fill and kill at that price for order id %d", order.GetId())
 	}
 
-	o.orders[order.ID] = &order
+	o.orders[order.GetId()] = &order
 
-	switch order.Side {
+	switch order.GetSide() {
 	case model.ASK:
-		priceLevel := &orderbookModel.AskPriceLevel{Price: order.Price}
+		priceLevel := &orderbookModel.AskPriceLevel{Price: order.GetPrice()}
 
 		if !o.asks.Has(priceLevel) {
 			priceLevel.TotalVolume = 0
@@ -174,10 +174,10 @@ func (o *OrderBookEngineImpl) AddOrder(order model.Order) ([]*model.Trade, error
 		}
 
 		currentPriceLevel.Orders = append(currentPriceLevel.Orders, &order)
-		currentPriceLevel.TotalVolume += order.InitialQuantity
+		currentPriceLevel.TotalVolume += order.GetInitialQuantity()
 
 	case model.BID:
-		priceLevel := &orderbookModel.BidPriceLevel{Price: order.Price}
+		priceLevel := &orderbookModel.BidPriceLevel{Price: order.GetPrice()}
 
 		if !o.bids.Has(priceLevel) {
 			priceLevel.TotalVolume = 0
@@ -192,35 +192,35 @@ func (o *OrderBookEngineImpl) AddOrder(order model.Order) ([]*model.Trade, error
 		}
 
 		currentPriceLevel.Orders = append(currentPriceLevel.Orders, &order)
-		currentPriceLevel.TotalVolume += order.InitialQuantity
+		currentPriceLevel.TotalVolume += order.GetInitialQuantity()
 	}
 
 	return o.matchOrder(), nil
 }
 
-func (o *OrderBookEngineImpl) CancelOrder(orderID model.OrderId) error {
+func (o *orderBookEngineImpl) CancelOrder(orderID model.OrderId) error {
 	order, exists := o.orders[orderID]
 	if !exists {
 		return fmt.Errorf("order not found: %d", orderID)
 	}
 
 	// Find and remove from price level
-	if order.Side == model.ASK {
+	if order.GetSide() == model.ASK {
 		// removeOrderByID
-		priceLevel := &orderbookModel.AskPriceLevel{Price: order.Price}
+		priceLevel := &orderbookModel.AskPriceLevel{Price: order.GetPrice()}
 		if item := o.asks.Get(priceLevel); item != nil {
-			item.(*orderbookModel.AskPriceLevel).RemoveOrderByID(order.ID)
+			item.(*orderbookModel.AskPriceLevel).RemoveOrderByID(order.GetId())
 		}
-		priceLevel.TotalVolume -= order.RemainingQuantity
+		priceLevel.TotalVolume -= order.GetRemainingQuantity()
 		if len(priceLevel.Orders) == 0 {
 			o.asks.Delete(priceLevel)
 		}
 	} else {
-		priceLevel := &orderbookModel.BidPriceLevel{Price: order.Price}
+		priceLevel := &orderbookModel.BidPriceLevel{Price: order.GetPrice()}
 		if item := o.bids.Get(priceLevel); item != nil {
-			item.(*orderbookModel.BidPriceLevel).RemoveOrderByID(order.ID)
+			item.(*orderbookModel.BidPriceLevel).RemoveOrderByID(order.GetId())
 		}
-		priceLevel.TotalVolume -= order.RemainingQuantity
+		priceLevel.TotalVolume -= order.GetRemainingQuantity()
 		if len(priceLevel.Orders) == 0 {
 			o.bids.Delete(priceLevel)
 		}
@@ -230,12 +230,12 @@ func (o *OrderBookEngineImpl) CancelOrder(orderID model.OrderId) error {
 	return nil
 }
 
-func (o *OrderBookEngineImpl) ModifyOrder(modify model.OrderModify, orderType model.OrderType) ([]*model.Trade, error) {
+func (o *orderBookEngineImpl) ModifyOrder(modify model.OrderModify, orderType model.OrderType) ([]*model.Trade, error) {
 	existing, ok := o.orders[modify.ID]
 	if !ok {
 		return nil, fmt.Errorf("cannot find order with id %v", modify.ID)
 	}
-	err := o.CancelOrder(existing.ID)
+	err := o.CancelOrder(existing.GetId())
 	if err != nil {
 		return nil, err
 	}
@@ -244,11 +244,11 @@ func (o *OrderBookEngineImpl) ModifyOrder(modify model.OrderModify, orderType mo
 	return addOrder, err
 }
 
-func (o *OrderBookEngineImpl) OrderSize() int {
+func (o *orderBookEngineImpl) OrderSize() int {
 	return o.asks.Len() + o.bids.Len()
 }
 
-func (o *OrderBookEngineImpl) getMarketDepth(levels int) *model.MarketDepth {
+func (o *orderBookEngineImpl) getMarketDepth(levels int) *model.MarketDepth {
 	depth := &model.MarketDepth{
 		Bids:      make([]model.MarketDepthLevel, 0, levels),
 		Asks:      make([]model.MarketDepthLevel, 0, levels),
@@ -295,7 +295,7 @@ func (o *OrderBookEngineImpl) getMarketDepth(levels int) *model.MarketDepth {
 }
 
 // GetTopOfBook returns best bid and ask
-func (o *OrderBookEngineImpl) GetTopOfBook() *model.TopOfBook {
+func (o *orderBookEngineImpl) GetTopOfBook() *model.TopOfBook {
 	tob := &model.TopOfBook{}
 
 	// Get best bid (highest price)
@@ -327,11 +327,11 @@ func (o *OrderBookEngineImpl) GetTopOfBook() *model.TopOfBook {
 }
 
 // GetOrderInfos - your original method, now implemented
-func (o *OrderBookEngineImpl) GetOrderInfos() *model.MarketDepth {
+func (o *orderBookEngineImpl) GetOrderInfos() *model.MarketDepth {
 	return o.getMarketDepth(10) // Default to top 10 levels
 }
 
-func (o *OrderBookEngineImpl) Initialize() {
+func (o *orderBookEngineImpl) Initialize() {
 	o.bids = btree.New(32) // degree tuned for performance
 	o.asks = btree.New(32)
 	o.orders = make(map[model.OrderId]*model.Order)
@@ -339,5 +339,5 @@ func (o *OrderBookEngineImpl) Initialize() {
 }
 
 func NewOrderBookEngine() OrderBookEngine {
-	return &OrderBookEngineImpl{}
+	return &orderBookEngineImpl{}
 }

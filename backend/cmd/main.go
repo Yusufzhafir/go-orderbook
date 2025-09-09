@@ -26,6 +26,9 @@ func main() {
 		logger.Fatal("Error loading .env file")
 	}
 
+	ob := engine.NewOrderBookEngine()
+	ob.Initialize()
+
 	serveMux := http.NewServeMux()
 
 	//bind router
@@ -47,8 +50,6 @@ func main() {
 		}
 	}()
 
-	ob := engine.NewOrderBookEngine()
-	ob.Initialize()
 	// Block until we get a signal (or parent context canceled).
 	<-rootCtx.Done()
 	logger.Println("shutdown signal received")

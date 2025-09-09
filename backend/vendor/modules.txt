@@ -4,3 +4,9 @@ github.com/google/btree
 # github.com/joho/godotenv v1.5.1
 ## explicit; go 1.12
 github.com/joho/godotenv
+# github.com/tigerbeetle/tigerbeetle-go v0.16.57
+## explicit; go 1.17
+github.com/tigerbeetle/tigerbeetle-go
+github.com/tigerbeetle/tigerbeetle-go/pkg/errors
+github.com/tigerbeetle/tigerbeetle-go/pkg/native
+github.com/tigerbeetle/tigerbeetle-go/pkg/types
