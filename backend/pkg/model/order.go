@@ -23,6 +23,9 @@ func NewOrder(id OrderId, side Side, price Price, quantity Quantity, orderType O
 		orderType:         orderType,
 	}
 }
+func NewEmptyOrder(id OrderId, side Side, price Price, quantity Quantity, orderType OrderType) Order {
+	return Order{}
+}
 
 func (o *Order) GetFilledQuantity() Quantity {
 	return o.initialQuantity - o.remainingQuantity
@@ -81,10 +84,10 @@ func (om *OrderModify) ToOrder(orderType OrderType) Order {
 	)
 }
 
-type Price int64
-type Quantity int64
-type OrderId int64
-type OrderType int8
+type Price uint64
+type Quantity uint64
+type OrderId uint64
+type OrderType uint8
 
 const (
 	ORDER_FILL_AND_KILL OrderType = iota

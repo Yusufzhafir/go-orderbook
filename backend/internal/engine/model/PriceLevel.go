@@ -20,10 +20,10 @@ func (pl *AskPriceLevel) Less(than btree.Item) bool {
 // Fast order removal with index tracking
 func (pl *AskPriceLevel) RemoveOrderByID(orderID model.OrderId) bool {
 	for i, order := range pl.Orders {
-		if order.ID == orderID {
+		if order.GetId() == orderID {
 			// Remove from slice
 			pl.Orders = append(pl.Orders[:i], pl.Orders[i+1:]...)
-			pl.TotalVolume -= order.InitialQuantity
+			pl.TotalVolume -= order.GetInitialQuantity()
 			return true
 		}
 	}
@@ -45,10 +45,10 @@ func (bpl *BidPriceLevel) Less(than btree.Item) bool {
 // Fast order removal with index tracking
 func (pl *BidPriceLevel) RemoveOrderByID(orderID model.OrderId) bool {
 	for i, order := range pl.Orders {
-		if order.ID == orderID {
+		if order.GetId() == orderID {
 			// Remove from slice
 			pl.Orders = append(pl.Orders[:i], pl.Orders[i+1:]...)
-			pl.TotalVolume -= order.InitialQuantity
+			pl.TotalVolume -= order.GetInitialQuantity()
 			return true
 		}
 	}

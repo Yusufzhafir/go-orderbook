@@ -13,7 +13,7 @@ import (
 	"github.com/Yusufzhafir/go-orderbook/backend/pkg/model"
 
 	tb "github.com/tigerbeetle/tigerbeetle-go"
-	tbtypes "github.com/tigerbeetle/tigerbeetle-go/pkg/types"
+	. "github.com/tigerbeetle/tigerbeetle-go/pkg/types"
 )
 
 type OrderUseCase interface {
@@ -43,7 +43,7 @@ type orderUseCaseImpl struct {
 
 	// For demo, we’ll assume a single “exchange escrow” account.
 
-	escrowAccount tbtypes.Uint128
+	escrowAccount Uint128
 }
 
 // NewOrderUseCase constructs with an already-initialized TB client.
@@ -55,14 +55,14 @@ type OrderUseCaseOpts struct {
 
 	TBLedgerID uint32 // e.g., 1
 
-	EscrowAccount tbtypes.Uint128
+	EscrowAccount Uint128
 }
 
 func NewOrderUseCase(ctx context.Context, opts OrderUseCaseOpts) (OrderUseCase, error) {
 
 	// In TigerBeetle, you create the client once and reuse
 
-	client, err := tb.NewClient(tbtypes.ToUint128(0), opts.TBClusterAddrs)
+	client, err := tb.NewClient(ToUint128(0), opts.TBClusterAddrs)
 
 	if err != nil {
 
@@ -71,7 +71,7 @@ func NewOrderUseCase(ctx context.Context, opts OrderUseCaseOpts) (OrderUseCase, 
 	}
 
 	// optionally: ping to ensure connection
-33	return &orderUseCaseImpl{
+	return &orderUseCaseImpl{
 		orderBookEngine: opts.OrderBookEngine,
 		tbClient:        &client,
 		ledgerID:        opts.TBLedgerID,
@@ -88,46 +88,43 @@ func (ou *orderUseCaseImpl) AddOrder(ctx context.Context, side model.Side, price
 
 	// Using TigerBeetle’s ID() is fine to produce unique 128-bit values; map to your OrderId type.
 
-	tbIDs := tb.ID()
-
-	orderID := model.OrderId(tbIDs[1]) // or map properly to your type
+	orderID := model.OrderId(model.OrderId(time.Now().UnixMilli())) // or map properly to your type
 
 	// Example: reserve funds for a LIMIT BUY by debiting user cash -> credit escrow
 	// and for a LIMIT SELL, reserve asset -> credit escrow. Adjust to your accounting model.
 	// For demo, assume you can map from context to a user account:
-	userCash := userCashAccountFromContext(ctx)   // tbtypes.Uint128
-	userAsset := userAssetAccountFromContext(ctx) // tbtypes.Uint128
+	// userCash := uint64(10) // Uint128
+	// userAsset := 10        // Uint128
 
 	// Optional reservation for non-market/IOC orders:
-	if orderType == model.ORDER_LIMIT {
-		if side == model.BID {
-			amount := toTigerBeetleUnitsCash(price, quantity) // compute cash = price * qty in integer smallest units
-			if err := ou.reserveFunds(ctx, userCash, ou.escrowAccount, amount, 1001 /*code*/); err != nil {
-				return nil, 0, err
-			}
-		} else if side == model.ASK {
-			amount := toTigerBeetleUnitsAsset(quantity)
-			if err := ou.reserveFunds(ctx, userAsset, ou.escrowAccount, amount, 1002); err != nil {
-				return nil, 0, err
-			}
-		}
-	}
+	// if orderType == model.ORDER_GOOD_TILL_CANCEL {
+	// 	if side == model.BID {
+	// 		amount := toTigerBeetleUnitsCash(price, quantity) // compute cash = price * qty in integer smallest units
+	// 		if err := ou.reserveFunds(ctx, userCash, ou.escrowAccount, amount, 1001 /*code*/); err != nil {
+	// 			return nil, 0, err
+	// 		}
+	// 	} else if side == model.ASK {
+	// 		amount := toTigerBeetleUnitsAsset(quantity)
+	// 		if err := ou.reserveFunds(ctx, userAsset, ou.escrowAccount, amount, 1002); err != nil {
+	// 			return nil, 0, err
+	// 		}
+	// 	}
+	// }
 
 	// Submit to engine
-	trades, err := ou.orderBookEngine.AddOrder(model.Order{
-		ID:       orderID,
-		Side:     side,
-		Price:    price,
-		Quantity: quantity,
-		Type:     orderType,
-		// Timestamp: time.Now(), if your model has it
-	})
-	if err != nil {
-		// If reservation was made, optionally release it here
-		// Release is the inverse transfer: escrow -> user
-		_ = ou.releaseReservationBestEffort(ctx, side, userCash, userAsset, quantity, price)
-		return nil, 0, err
-	}
+	trades, _ := ou.orderBookEngine.AddOrder(model.NewOrder(
+		orderID,
+		side,
+		price,
+		quantity,
+		orderType,
+	))
+	// if err != nil {
+	// 	// If reservation was made, optionally release it here
+	// 	// Release is the inverse transfer: escrow -> user
+	// 	_ = ou.releaseReservationBestEffort(ctx, side, userCash, userAsset, quantity, price)
+	// 	return nil, 0, err
+	// }
 
 	// For each trade, settle funds atomically in TB (batch transfers).
 	// Example settlement:
@@ -189,13 +186,13 @@ func (ou *orderUseCaseImpl) GetOrderInfos(ctx context.Context) *model.MarketDept
 // TigerBeetle helpers:
 
 // reserveFunds creates a transfer user -> escrow (for cash or asset).
-func (ou *orderUseCaseImpl) reserveFunds(ctx context.Context, debit tbtypes.Uint128, credit tbtypes.Uint128, amount uint64, code uint16) error {
+func (ou *orderUseCaseImpl) reserveFunds(ctx context.Context, debit Uint128, credit Uint128, amount Uint128, code uint16) error {
 
-	transfers := []tbtypes.Transfer{
+	transfers := []Transfer{
 
 		{
 
-			ID: tbtypes.ID(), // unique
+			ID: ID(), // unique
 
 			DebitAccountID: debit,
 
@@ -213,7 +210,8 @@ func (ou *orderUseCaseImpl) reserveFunds(ctx context.Context, debit tbtypes.Uint
 		},
 	}
 
-	if results, err := ou.tbClient.CreateTransfers(ctx, transfers); err != nil {
+	//cannot pass context
+	if results, err := (*ou.tbClient).CreateTransfers(transfers); err != nil {
 
 		return err
 
@@ -231,11 +229,11 @@ func (ou *orderUseCaseImpl) reserveFunds(ctx context.Context, debit tbtypes.Uint
 
 // releaseReservationBestEffort is an example; tailor as needed.
 
-func (ou *orderUseCaseImpl) releaseReservationBestEffort(ctx context.Context, side model.Side, userCash, userAsset tbtypes.Uint128, qty model.Quantity, price model.Price) error {
+func (ou *orderUseCaseImpl) releaseReservationBestEffort(ctx context.Context, side model.Side, userCash, userAsset Uint128, qty model.Quantity, price model.Price) error {
 
-	var debit, credit tbtypes.Uint128
+	var debit, credit Uint128
 
-	var amount uint64
+	var amount Uint128
 
 	switch side {
 
@@ -257,9 +255,9 @@ func (ou *orderUseCaseImpl) releaseReservationBestEffort(ctx context.Context, si
 
 	}
 
-	transfers := []tbtypes.Transfer{{
+	transfers := []Transfer{{
 
-		ID: tb.ID()[0],
+		ID: ID(),
 
 		DebitAccountID: debit,
 
@@ -274,7 +272,7 @@ func (ou *orderUseCaseImpl) releaseReservationBestEffort(ctx context.Context, si
 		Timestamp: uint64(time.Now().UnixNano()),
 	}}
 
-	results, err := ou.tbClient.CreateTransfers(ctx, transfers)
+	results, err := (*ou.tbClient).CreateTransfers(transfers)
 
 	if err != nil {
 
@@ -296,48 +294,49 @@ func (ou *orderUseCaseImpl) releaseReservationBestEffort(ctx context.Context, si
 
 func (ou *orderUseCaseImpl) settleTrades(ctx context.Context, trades []*model.Trade) error {
 
-	transfers := make([]tbtypes.Transfer, 0, len(trades)*2)
+	// transfers := make([]Transfer, 0, len(trades)*2)
 
-	for _, t := range trades {
-		// Map trade maker/taker to their TB accounts
-		makerCash := accountForOrderIDCash(t.MakerID)
-		makerAsset := accountForOrderIDAsset(t.MakerID)
-		takerCash := accountForOrderIDCash(t.TakerID)
-		takerAsset := accountForOrderIDAsset(t.TakerID)
+	for i, _ := range trades {
+		i += 1
+		// // Map trade maker/taker to their TB accounts
+		// makerCash := accountForOrderIDCash(t.MakerID)
+		// makerAsset := accountForOrderIDAsset(t.MakerID)
+		// takerCash := accountForOrderIDCash(t.TakerID)
+		// takerAsset := accountForOrderIDAsset(t.TakerID)
 
-		cashAmount := toTigerBeetleUnitsCash(t.Price, t.Quantity)
-		assetAmount := toTigerBeetleUnitsAsset(t.Quantity)
+		// cashAmount := toTigerBeetleUnitsCash(t.Price, t.Quantity)
+		// assetAmount := toTigerBeetleUnitsAsset(t.Quantity)
 
-		// Example: escrow -> seller cash, escrow -> buyer asset
-		transfers = append(transfers,
-			tbtypes.Transfer{
-				ID:              tb.ID()[0],
-				DebitAccountID:  ou.escrowAccount,
-				CreditAccountID: sellerCashAccount(makerCash, takerCash, t), // whichever side is seller
-				Amount:          cashAmount,
-				Ledger:          ou.ledgerID,
-				Code:            3001,
-				Timestamp:       uint64(time.Now().UnixNano()),
-			},
-			tbtypes.Transfer{
-				ID:              tb.ID()[0],
-				DebitAccountID:  ou.escrowAccount,
-				CreditAccountID: buyerAssetAccount(makerAsset, takerAsset, t),
-				Amount:          assetAmount,
-				Ledger:          ou.ledgerID,
-				Code:            3002,
-				Timestamp:       uint64(time.Now().UnixNano()),
-			},
-		)
+		// // Example: escrow -> seller cash, escrow -> buyer asset
+		// transfers = append(transfers,
+		// 	Transfer{
+		// 		ID:              tb.ID()[0],
+		// 		DebitAccountID:  ou.escrowAccount,
+		// 		CreditAccountID: sellerCashAccount(makerCash, takerCash, t), // whichever side is seller
+		// 		Amount:          cashAmount,
+		// 		Ledger:          ou.ledgerID,
+		// 		Code:            3001,
+		// 		Timestamp:       uint64(time.Now().UnixNano()),
+		// 	},
+		// 	Transfer{
+		// 		ID:              tb.ID()[0],
+		// 		DebitAccountID:  ou.escrowAccount,
+		// 		CreditAccountID: buyerAssetAccount(makerAsset, takerAsset, t),
+		// 		Amount:          assetAmount,
+		// 		Ledger:          ou.ledgerID,
+		// 		Code:            3002,
+		// 		Timestamp:       uint64(time.Now().UnixNano()),
+		// 	},
+		// )
 	}
 
-	results, err := ou.tbClient.CreateTransfers(ctx, transfers)
-	if err != nil {
-		return err
-	}
-	if len(results) > 0 {
-		return fmt.Errorf("settlement failures: %+v", results)
-	}
+	// results, err := ou.tbClient.CreateTransfers(ctx, transfers)
+	// if err != nil {
+	// 	return err
+	// }
+	// if len(results) > 0 {
+	// 	return fmt.Errorf("settlement failures: %+v", results)
+	// }
 	return nil
 
 }

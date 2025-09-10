@@ -44,15 +44,19 @@ func logging(next http.Handler) http.Handler {
 	})
 }
 
-func bindTicker(serverRouter *http.ServeMux) {
+func bindTicker(serverRouter *http.ServeMux, orderUsecase *order.OrderUseCase) {
 	serverRouter.Handle("GET /api/v1/ticker", logging(http.HandlerFunc(defaultHandler)))
 	serverRouter.Handle("GET /api/v1/ticker/{ticker}", logging(http.HandlerFunc(defaultHandler)))
-	serverRouter.Handle("GET /api/v1/ticker/{ticker}/order-list", logging(http.HandlerFunc(defaultHandler)))
+	serverRouter.Handle("GET /api/v1/ticker/{ticker}/order-list", logging(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		uc := *orderUsecase
+		data := uc.GetOrderInfos(r.Context())
+		writeJSON(w, http.StatusOK, data)
+	})))
 	serverRouter.Handle("GET /api/v1/ticker/{ticker}/order-queue/{price}", logging(http.HandlerFunc(defaultHandler)))
 }
 
 func bindOrder(serverRouter *http.ServeMux, usecase *order.OrderUseCase) {
-	serverRouter.Handle("POST /api/v1/order/add", http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+	serverRouter.Handle("POST /api/v1/order/add", logging(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		type AddOrderRequest struct {
 			Side     model.Side      `json:"side"` // "BID" or "ASK" (or BUY/SELL depending on your model)
 			Price    model.Price     `json:"price"`
@@ -79,7 +83,7 @@ func bindOrder(serverRouter *http.ServeMux, usecase *order.OrderUseCase) {
 		}
 
 		uc := *usecase
-		trades, orderID, err := uc.AddOrder(r.Context(), ord)
+		trades, orderID, err := uc.AddOrder(r.Context(), req.Side, req.Price, req.Quantity, req.Type)
 		if err != nil {
 			writeJSON(w, http.StatusUnprocessableEntity, AddOrderResponse{
 				Status:  "rejected",
@@ -93,33 +97,91 @@ func bindOrder(serverRouter *http.ServeMux, usecase *order.OrderUseCase) {
 			Trades:  trades,
 			Status:  "accepted",
 		})
-		orderUsecase := *usecase
-		orderUsecase.AddOrder(model.Order{})
-	}))
-	serverRouter.Handle("PUT /api/v1/order/modify", http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+	})))
+	serverRouter.Handle("PUT /api/v1/order/modify", logging(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		type ModifyOrderRequest struct {
-			Id model.OrderId
-			// Side     model.Side // i dont think we should let users modify order to change side becasue i will be confusing
-			Price    model.Price
-			Quantity model.Quantity
-			Type     model.OrderType
+			ID       model.OrderId   `json:"id"`
+			Price    model.Price     `json:"price,omitempty"`
+			Quantity model.Quantity  `json:"quantity,omitempty"`
+			Type     model.OrderType `json:"type,omitempty"`
 		}
 		type ModifyOrderResponse struct {
+			OrderID model.OrderId  `json:"orderId"`
+			Trades  []*model.Trade `json:"trades,omitempty"`
+			Status  string         `json:"status"`
+			Message string         `json:"message,omitempty"`
 		}
 
-		orderUsecase := *usecase
-		orderUsecase.ModifyOrder(model.Order{})
-	}))
-	serverRouter.Handle("DELETE /api/v1/order/cancel", http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		type CancelOrder struct {
-			Id model.OrderId
+		req, err := decodeJSON[ModifyOrderRequest](w, r)
+		if err != nil {
+			writeJSONError(w, http.StatusBadRequest, err)
+			return
 		}
-		type AddOrderResponse struct {
+		if req.ID == 0 {
+			writeJSONError(w, http.StatusBadRequest, errors.New("id is required"))
+			return
 		}
 
-		orderUsecase := *usecase
-		orderUsecase.CancelOrder(model.Order{})
-	}))
+		// Build a modify command; adapt to your real usecase signature
+		modify := model.OrderModify{
+			ID:       req.ID,
+			Price:    req.Price,
+			Quantity: req.Quantity,
+		}
+		newType := req.Type
+		uc := *usecase
+		trades, err := uc.ModifyOrder(r.Context(), modify, newType)
+		if err != nil {
+			writeJSON(w, http.StatusUnprocessableEntity, ModifyOrderResponse{
+				OrderID: req.ID,
+				Status:  "rejected",
+				Message: err.Error(),
+			})
+			return
+		}
+
+		writeJSON(w, http.StatusOK, ModifyOrderResponse{
+			OrderID: req.ID,
+			Trades:  trades,
+			Status:  "accepted",
+		})
+	})))
+	serverRouter.Handle("DELETE /api/v1/order/cancel", logging(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		type CancelOrderRequest struct {
+			ID model.OrderId `json:"id"`
+		}
+		type CancelOrderResponse struct {
+			OrderID model.OrderId `json:"orderId"`
+			Status  string        `json:"status"`
+			Message string        `json:"message,omitempty"`
+		}
+
+		req, err := decodeJSON[CancelOrderRequest](w, r)
+		if err != nil {
+			writeJSONError(w, http.StatusBadRequest, err)
+			return
+		}
+		if req.ID == 0 {
+			writeJSONError(w, http.StatusBadRequest, errors.New("id is required"))
+			return
+		}
+
+		uc := *usecase
+		err = uc.CancelOrder(r.Context(), req.ID)
+		if err != nil {
+			writeJSON(w, http.StatusUnprocessableEntity, CancelOrderResponse{
+				OrderID: req.ID,
+				Status:  "rejected",
+				Message: err.Error(),
+			})
+			return
+		}
+
+		writeJSON(w, http.StatusOK, CancelOrderResponse{
+			OrderID: req.ID,
+			Status:  "accepted",
+		})
+	})))
 }
 func bindUser(serverRouter *http.ServeMux) {
 	serverRouter.Handle("GET /api/v1/user/{id}", logging(http.HandlerFunc(defaultHandler)))
@@ -136,7 +198,7 @@ type BindRouterOpts struct {
 func BindRouter(opts BindRouterOpts) {
 	bindOrder(opts.ServerRouter, opts.OrderUseCase)
 	bindUser(opts.ServerRouter)
-	bindTicker(opts.ServerRouter)
+	bindTicker(opts.ServerRouter, opts.OrderUseCase)
 }
 
 // decodeJSON reads and unmarshals the request body into T with sane limits and timeouts.

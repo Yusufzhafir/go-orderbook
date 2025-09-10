@@ -93,6 +93,9 @@ func (o *orderBookEngineImpl) matchOrder() []*model.Trade {
 
 			bestQuantity := min(askOrder.GetRemainingQuantity(), bidOrder.GetRemainingQuantity())
 			bestPrice := min(askOrder.GetPrice(), bidOrder.GetPrice())
+			if bidsPriceLevel.Price >= asksPriceLevel.Price {
+				bestPrice = max(askOrder.GetPrice(), bidOrder.GetPrice())
+			}
 			askOrder.Fill(bestQuantity)
 			bidOrder.Fill(bestQuantity)
 
@@ -130,7 +133,7 @@ func (o *orderBookEngineImpl) matchOrder() []*model.Trade {
 		asksPriceLevel := o.asks.Min().(*orderbookModel.AskPriceLevel)
 		askOrder := asksPriceLevel.Orders[0]
 		if askOrder.GetType() == model.ORDER_FILL_AND_KILL {
-			//cancel order
+			o.CancelOrder(askOrder.GetId())
 		}
 	}
 	if o.bids.Len() > 0 {
@@ -138,7 +141,7 @@ func (o *orderBookEngineImpl) matchOrder() []*model.Trade {
 
 		bidOrder := bidsPriceLevel.Orders[0]
 		if bidOrder.GetType() == model.ORDER_FILL_AND_KILL {
-			//cancel order
+			o.CancelOrder(bidOrder.GetId())
 		}
 	}
 

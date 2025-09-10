@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"log"
+	"math/big"
 	"net/http"
 	"os"
 	"os/signal"
@@ -12,7 +13,9 @@ import (
 
 	"github.com/Yusufzhafir/go-orderbook/backend/internal/engine"
 	"github.com/Yusufzhafir/go-orderbook/backend/internal/router"
+	"github.com/Yusufzhafir/go-orderbook/backend/internal/usecase/order"
 	"github.com/joho/godotenv"
+	"github.com/tigerbeetle/tigerbeetle-go/pkg/types"
 )
 
 func main() {
@@ -28,12 +31,22 @@ func main() {
 
 	ob := engine.NewOrderBookEngine()
 	ob.Initialize()
+	usecaseOpts := order.OrderUseCaseOpts{
+		OrderBookEngine: ob,
+		TBClusterAddrs:  []string{"3000"},
+		TBLedgerID:      uint32(0),
+		EscrowAccount:   types.BigIntToUint128(*big.NewInt(1)),
+	}
+	orderUseCase, err := order.NewOrderUseCase(rootCtx, usecaseOpts)
 
+	if err != nil {
+		logger.Fatalf("error creating order usecase: %v", err)
+	}
 	serveMux := http.NewServeMux()
-
 	//bind router
 	bindRouterOpts := router.BindRouterOpts{
 		ServerRouter: serveMux,
+		OrderUseCase: &orderUseCase,
 	}
 	router.BindRouter(bindRouterOpts)
 	logger.Println("finished binding router")
