@@ -56,7 +56,6 @@ export function useTrades(symbol: string, mode: Mode = "subscribeMessage") {
         qc.setQueryData<TradeMsg[]>(["trades", symbol], (prev) => {
           const curr = prev || []
           const next = [payload.trade, ...curr].slice(0, 300);
-          console.log("this is updated payload", JSON.stringify(next));
           return next;
         });
       } catch {
