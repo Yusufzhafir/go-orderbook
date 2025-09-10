@@ -99,12 +99,17 @@ func (o *orderBookEngineImpl) matchOrder() []*model.Trade {
 			askOrder.Fill(bestQuantity)
 			bidOrder.Fill(bestQuantity)
 
-			trades = append(trades, &model.Trade{
+			trade := model.Trade{
 				MakerID:  askOrder.GetId(),
 				TakerID:  bidOrder.GetId(),
 				Price:    bestPrice,
 				Quantity: bestQuantity,
-			})
+				Side:     model.BID,
+			}
+			if askOrder.GetType() == model.ORDER_FILL_AND_KILL {
+				trade.Side = model.ASK
+			}
+			trades = append(trades, &trade)
 
 			if askOrder.IsFilled() {
 				delete(o.orders, askOrder.GetId())

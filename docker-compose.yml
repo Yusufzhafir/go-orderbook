@@ -1,14 +1,13 @@
-version: "3.9"
-
-
 services:
   tigerbeetle_0:
-    image: ghcr.io/tigerbeetle/tigerbeetle
+    container_name: tigerbeetle_0
+    image: ghcr.io/tigerbeetle/tigerbeetle:debug
     command: "start --addresses=0.0.0.0:3001,0.0.0.0:3002,0.0.0.0:3003 /data/0_0.tigerbeetle"
-    network_mode: host
-    cap_add:       # HERE2
-      - IPC_LOCK   # HERE
+    cap_add:   
+      - IPC_LOCK
     volumes:
       - ./data:/data
     security_opt:
       - "seccomp=unconfined"
+    ports:
+      - "3000:3001"

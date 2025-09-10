@@ -14,9 +14,25 @@ import (
 	"github.com/Yusufzhafir/go-orderbook/backend/internal/engine"
 	"github.com/Yusufzhafir/go-orderbook/backend/internal/router"
 	"github.com/Yusufzhafir/go-orderbook/backend/internal/usecase/order"
+	"github.com/Yusufzhafir/go-orderbook/backend/internal/websocket"
+	"github.com/Yusufzhafir/go-orderbook/backend/pkg/model"
 	"github.com/joho/godotenv"
 	"github.com/tigerbeetle/tigerbeetle-go/pkg/types"
 )
+
+func mapToWsTrade(order model.Trade) websocket.Trade {
+	side := "BUY"
+	if order.Side == model.ASK {
+		side = "SELL"
+	}
+	return websocket.Trade{
+		Symbol: "ticker",
+		Price:  order.Price,
+		Qty:    order.Quantity,
+		Side:   side,
+		Ts:     order.Timestamp.UnixMilli(),
+	}
+}
 
 func main() {
 	rootCtx, stop := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)
@@ -42,7 +58,16 @@ func main() {
 	if err != nil {
 		logger.Fatalf("error creating order usecase: %v", err)
 	}
+	hub := websocket.NewHub(logger)
+	go hub.Run(rootCtx)
+
 	serveMux := http.NewServeMux()
+
+	//start ws on servemux
+	serveMux.HandleFunc("/ws", func(w http.ResponseWriter, r *http.Request) {
+		websocket.ServeWS(hub, w, r)
+	})
+
 	//bind router
 	bindRouterOpts := router.BindRouterOpts{
 		ServerRouter: serveMux,
@@ -55,6 +80,12 @@ func main() {
 		Addr:    ":8080",
 		Handler: serveMux,
 	}
+
+	orderUseCase.RegisterTradeHandler(func(tr model.Trade) {
+		// quick mapping + publish
+		hub.PublishTrade(mapToWsTrade(tr))
+	})
+
 	// Start server in background.
 	go func() {
 		logger.Printf("HTTP server listening on %s", server.Addr)

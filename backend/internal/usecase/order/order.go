@@ -28,6 +28,8 @@ type OrderUseCase interface {
 	GetTopOfBook(ctx context.Context) *model.TopOfBook
 
 	GetOrderInfos(ctx context.Context) *model.MarketDepth
+
+	RegisterTradeHandler(handler TradeHandler)
 }
 
 type orderUseCaseImpl struct {
@@ -44,9 +46,12 @@ type orderUseCaseImpl struct {
 	// For demo, we’ll assume a single “exchange escrow” account.
 
 	escrowAccount Uint128
+
+	tradeHandler TradeHandler
 }
 
 // NewOrderUseCase constructs with an already-initialized TB client.
+type TradeHandler func(model.Trade)
 
 type OrderUseCaseOpts struct {
 	OrderBookEngine engine.OrderBookEngine
@@ -78,6 +83,10 @@ func NewOrderUseCase(ctx context.Context, opts OrderUseCaseOpts) (OrderUseCase, 
 		escrowAccount:   opts.EscrowAccount,
 	}, nil
 
+}
+
+func (ou *orderUseCaseImpl) RegisterTradeHandler(handler TradeHandler) {
+	ou.tradeHandler = handler
 }
 
 // AddOrder writes any necessary pre-commit ledger entries (e.g., reserve funds), then submits to engine.
@@ -112,23 +121,24 @@ func (ou *orderUseCaseImpl) AddOrder(ctx context.Context, side model.Side, price
 	// }
 
 	// Submit to engine
-	trades, _ := ou.orderBookEngine.AddOrder(model.NewOrder(
+	newOrder := model.NewOrder(
 		orderID,
 		side,
 		price,
 		quantity,
 		orderType,
-	))
-	// if err != nil {
-	// 	// If reservation was made, optionally release it here
-	// 	// Release is the inverse transfer: escrow -> user
-	// 	_ = ou.releaseReservationBestEffort(ctx, side, userCash, userAsset, quantity, price)
-	// 	return nil, 0, err
-	// }
+	)
+	trades, err := ou.orderBookEngine.AddOrder(newOrder)
+	if err != nil {
+		return nil, newOrder.GetId(), err
+	}
 
 	// For each trade, settle funds atomically in TB (batch transfers).
 	// Example settlement:
-	if len(trades) > 0 {
+	for _, trade := range trades {
+		if ou.tradeHandler != nil {
+			ou.tradeHandler(*trade)
+		}
 		if err := ou.settleTrades(ctx, trades); err != nil {
 			// Settlement error handling policy is up to you:
 			// - If engine already matched, you need compensating actions or design a 2-phase approach.
@@ -161,7 +171,16 @@ func (ou *orderUseCaseImpl) ModifyOrder(ctx context.Context, modify model.OrderM
 
 	// Consider adjusting reservations if price/quantity increases.
 
-	return ou.orderBookEngine.ModifyOrder(modify, orderType)
+	trades, err := ou.orderBookEngine.ModifyOrder(modify, orderType)
+	if err != nil {
+		return nil, err
+	}
+	for _, trade := range trades {
+		if ou.tradeHandler != nil {
+			ou.tradeHandler(*trade)
+		}
+	}
+	return trades, nil
 
 }
 
