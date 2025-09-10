@@ -76,13 +76,15 @@ func main() {
 	router.BindRouter(bindRouterOpts)
 	logger.Println("finished binding router")
 
+	corsServerMux := router.Cors(serveMux)
 	server := http.Server{
 		Addr:    ":8080",
-		Handler: serveMux,
+		Handler: corsServerMux,
 	}
 
 	orderUseCase.RegisterTradeHandler(func(tr model.Trade) {
 		// quick mapping + publish
+		logger.Printf("Sending Trades")
 		hub.PublishTrade(mapToWsTrade(tr))
 	})
 

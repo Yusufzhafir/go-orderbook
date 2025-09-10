@@ -100,11 +100,12 @@ func (o *orderBookEngineImpl) matchOrder() []*model.Trade {
 			bidOrder.Fill(bestQuantity)
 
 			trade := model.Trade{
-				MakerID:  askOrder.GetId(),
-				TakerID:  bidOrder.GetId(),
-				Price:    bestPrice,
-				Quantity: bestQuantity,
-				Side:     model.BID,
+				MakerID:   askOrder.GetId(),
+				TakerID:   bidOrder.GetId(),
+				Price:     bestPrice,
+				Quantity:  bestQuantity,
+				Side:      model.BID,
+				Timestamp: time.Now(),
 			}
 			if askOrder.GetType() == model.ORDER_FILL_AND_KILL {
 				trade.Side = model.ASK

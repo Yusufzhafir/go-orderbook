@@ -44,6 +44,47 @@ func logging(next http.Handler) http.Handler {
 	})
 }
 
+// wrap your mux with cors(mux) when starting the server
+// http.ListenAndServe(":8080", cors(logging(mux)))
+
+func Cors(next http.Handler) http.Handler {
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		origin := r.Header.Get("Origin")
+		if origin != "" {
+			// If you need cookies, echo origin & add Allow-Credentials (no "*")
+			w.Header().Set("Access-Control-Allow-Origin", origin) // or "*" if no credentials
+			w.Header().Set("Vary", "Origin")
+
+			// Reflect requested headers/method for preflight robustness
+			reqHdrs := r.Header.Get("Access-Control-Request-Headers")
+			if reqHdrs == "" {
+				reqHdrs = "Content-Type, Authorization"
+			}
+			w.Header().Set("Access-Control-Allow-Headers", reqHdrs)
+
+			reqMethod := r.Header.Get("Access-Control-Request-Method")
+			if reqMethod == "" {
+				reqMethod = "GET, POST, PUT, DELETE, OPTIONS"
+			}
+			w.Header().Set("Access-Control-Allow-Methods", reqMethod)
+
+			// If you need cookies across origins:
+			// w.Header().Set("Access-Control-Allow-Credentials", "true")
+
+			// Cache preflight for a day (optional)
+			w.Header().Set("Access-Control-Max-Age", "86400")
+		}
+
+		// Short-circuit preflight so it never hits your route table
+		if r.Method == http.MethodOptions {
+			w.WriteHeader(http.StatusNoContent) // 204
+			return
+		}
+
+		next.ServeHTTP(w, r)
+	})
+}
+
 func bindTicker(serverRouter *http.ServeMux, orderUsecase *order.OrderUseCase) {
 	serverRouter.Handle("GET /api/v1/ticker", logging(http.HandlerFunc(defaultHandler)))
 	serverRouter.Handle("GET /api/v1/ticker/{ticker}", logging(http.HandlerFunc(defaultHandler)))
