@@ -5,32 +5,41 @@ export enum Side {
   ASK
 }
 
-export type OrderTypeString = "LIMIT" | "MARKET" | "FOK" | "IOC" | "GTC";
+export type OrderTypeString = "LIMIT" | "MARKET"
 export enum OrderType {
   ORDER_FILL_AND_KILL,
   ORDER_GOOD_TILL_CANCEL
 }
 
-export function MapOrderType(orderType: OrderTypeString){
+export function MapOrderType(orderType: OrderTypeString) {
   switch (orderType) {
     case "LIMIT":
       return OrderType.ORDER_GOOD_TILL_CANCEL
     case "MARKET":
-      return OrderType.ORDER_FILL_AND_KILL  
+      return OrderType.ORDER_FILL_AND_KILL
     default:
       return OrderType.ORDER_FILL_AND_KILL
   }
 }
 
+interface MatchorderType {
+  Side: number
+  MakerID: number
+  TakerID: number
+  Price: number
+  Quantity: number
+  Timestamp: string
+}
 export interface AddOrderRequest {
   side: Side;
   price: number;     // uint64 server-side
   quantity: number;  // uint64 server-side
   type: OrderType;
 }
+
 export interface AddOrderResponse {
   orderId: number;
-  trades?: any[];
+  trades?: MatchorderType[];
   status: "accepted" | "rejected";
   message?: string;
 }
@@ -41,7 +50,7 @@ export interface ModifyOrderRequest {
   quantity?: number;
   type?: OrderType;
 }
-export interface ModifyOrderResponse extends AddOrderResponse {}
+export type ModifyOrderResponse =  AddOrderResponse
 
 export interface CancelOrderRequest { id: number; }
 export interface CancelOrderResponse {
@@ -49,6 +58,19 @@ export interface CancelOrderResponse {
   status: "accepted" | "rejected";
   message?: string;
 }
+
+export interface OrderBookResponse {
+  bids: OrderBookLevel[]
+  asks: OrderBookLevel[]
+  timestamp: number
+}
+
+export interface OrderBookLevel {
+  price: number
+  volume: number
+  orderCount: number
+}
+
 
 async function http<T>(path: string, init: RequestInit): Promise<T> {
   const res = await fetch(`${API_BASE}${path}`, {
@@ -66,4 +88,6 @@ export const api = {
     http<ModifyOrderResponse>("/api/v1/order/modify", { method: "PUT", body: JSON.stringify(b) }),
   cancelOrder: (b: CancelOrderRequest) =>
     http<CancelOrderResponse>("/api/v1/order/cancel", { method: "DELETE", body: JSON.stringify(b) }),
+  fetchOrderBook: (ticker: string) =>
+    http<OrderBookResponse>(`/api/v1/ticker/${ticker}/order-list`, { method: "GET" }),
 };

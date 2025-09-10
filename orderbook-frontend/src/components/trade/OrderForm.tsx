@@ -1,7 +1,7 @@
 "use client";
 import * as React from "react";
 import { useMutation } from "@tanstack/react-query";
-import { api, MapOrderType, OrderTypeString, Side } from "@/api/client";
+import { api, MapOrderType, ModifyOrderRequest, OrderTypeString, Side } from "@/api/client";
 import { Card } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -14,12 +14,12 @@ export function AddOrderForm() {
   const [price, setPrice] = React.useState<string>("0");
   const [qty, setQty] = React.useState<string>("1");
 
-  const m = useMutation({ mutationFn: api.addOrder, onSuccess: (r) => alert(`${r.status}: ${r.orderId} ${r.message ?? ""}`), onError: (e: any) => alert(e.message) });
+  const m = useMutation({ mutationFn: api.addOrder, onSuccess: (r) => alert(`${r.status}: ${r.orderId} ${r.message ?? ""}`), onError: (e) => alert(e.message) });
 
   const submit = () => {
     m.mutate({
       side: side == "BID" ? Side.BID : Side.ASK,
-      type : MapOrderType(type),
+      type: MapOrderType(type),
       price: Number(price),
       quantity: Number(qty),
     });
@@ -77,20 +77,22 @@ export function ModifyCancelForm() {
   const mModify = useMutation({
     mutationFn: api.modifyOrder,
     onSuccess: (r) => alert(`${r.status}: ${r.orderId} ${r.message ?? ""}`),
-    onError: (e: any) => alert(e.message),
+    onError: (e) => alert(e.message),
   });
   const mCancel = useMutation({
     mutationFn: api.cancelOrder,
     onSuccess: (r) => alert(`${r.status}: ${r.orderId} ${r.message ?? ""}`),
-    onError: (e: any) => alert(e.message),
+    onError: (e) => alert(e.message),
   });
 
   const doModify = () => {
     if (!id) return alert("Order ID required");
-    const body: any = { id: Number(id) };
+    const body: ModifyOrderRequest = {
+      id: Number(id),
+    };
     if (price !== "") body.price = Number(price);
     if (qty !== "") body.quantity = Number(qty);
-    if (type) body.type = type;
+    if (type !== "") body.type = MapOrderType(type);
     mModify.mutate(body);
   };
   const doCancel = () => {
@@ -121,9 +123,6 @@ export function ModifyCancelForm() {
             <SelectContent>
               <SelectItem value="LIMIT">LIMIT</SelectItem>
               <SelectItem value="MARKET">MARKET</SelectItem>
-              <SelectItem value="IOC">IOC / FAK</SelectItem>
-              <SelectItem value="FOK">FOK</SelectItem>
-              <SelectItem value="GTC">GTC</SelectItem>
             </SelectContent>
           </Select>
         </div>

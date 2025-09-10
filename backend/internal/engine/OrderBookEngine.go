@@ -82,6 +82,7 @@ func (o *orderBookEngineImpl) matchOrder() []*model.Trade {
 		asksPriceLevel := o.asks.Min().(*orderbookModel.AskPriceLevel)
 		bidsPriceLevel := o.bids.Min().(*orderbookModel.BidPriceLevel)
 
+		log.Default().Printf("this is the initial volume ask %d bid %d", asksPriceLevel.TotalVolume, bidsPriceLevel.TotalVolume)
 		if bidsPriceLevel.Price < asksPriceLevel.Price {
 			break
 		}
@@ -115,14 +116,13 @@ func (o *orderBookEngineImpl) matchOrder() []*model.Trade {
 			if askOrder.IsFilled() {
 				delete(o.orders, askOrder.GetId())
 				asksPriceLevel.Orders = asksPriceLevel.Orders[1:] // Pop front
-				asksPriceLevel.TotalVolume -= bestQuantity
 			}
 			if bidOrder.IsFilled() {
 				delete(o.orders, bidOrder.GetId())
 				bidsPriceLevel.Orders = bidsPriceLevel.Orders[1:]
-				bidsPriceLevel.TotalVolume -= bestQuantity
-
 			}
+			asksPriceLevel.TotalVolume -= bestQuantity
+			bidsPriceLevel.TotalVolume -= bestQuantity
 
 			if len(asksPriceLevel.Orders) == 0 {
 				o.asks.Delete(asksPriceLevel)
@@ -132,6 +132,7 @@ func (o *orderBookEngineImpl) matchOrder() []*model.Trade {
 			}
 		}
 
+		log.Default().Printf("this is the initial volume ask %d bid %d", asksPriceLevel.TotalVolume, bidsPriceLevel.TotalVolume)
 	}
 
 	//asuming all order that can be matched is already matched 3finished all orders that can be matched

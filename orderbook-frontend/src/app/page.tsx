@@ -6,13 +6,16 @@ import { Label } from "@/components/ui/label";
 import { Input } from "@/components/ui/input";
 import { Select, SelectTrigger, SelectValue, SelectContent, SelectItem } from "@/components/ui/select";
 import { useTrades } from "@/hooks/trade/useTrade";
+import { useOrderBook } from "@/hooks/trade/useOrderbook";
+import OrderBook from "@/components/trade/OrderBook";
 import TradeTicker from "@/components/trade/TradeTicker";
 import { AddOrderForm, ModifyCancelForm } from "@/components/trade/OrderForm";
 
 export default function Page() {
   const [symbol, setSymbol] = React.useState("ticker");
   const [mode, setMode] = React.useState<"subscribeMessage" | "queryParam">("subscribeMessage");
-  const { trades, connected } = useTrades(symbol, mode);
+  const { trades, connected } = useTrades(symbol, mode); // optional
+  const { data: book, error } = useOrderBook(symbol, 20);
 
   return (
     <div className="p-4 grid lg:grid-cols-3 gap-4">
@@ -27,7 +30,17 @@ export default function Page() {
             </div>
             <div>
               <Label>WS Mode</Label>
-              <Select value={mode} onValueChange={(v) => setMode(v as any)}>
+              <Select value={mode} onValueChange={(v) => {
+                switch (v) {
+                  case "subscribeMessage":
+                    setMode(v)
+                    break;
+                  case "queryParam":
+                    setMode(v)
+                  default:
+                    break;
+                }
+              }}>
                 <SelectTrigger><SelectValue /></SelectTrigger>
                 <SelectContent>
                   <SelectItem value="subscribeMessage">Send subscribe message</SelectItem>
@@ -43,15 +56,23 @@ export default function Page() {
           </div>
         </Card>
 
-        <AddOrderForm />
-        <ModifyCancelForm />
+        {/* Order book */}
+        <div className="h-[60vh]">
+          {error ? (
+            <Card className="p-4 text-sm text-red-600">Failed to load order book: {(error as Error).message}</Card>
+          ) : (
+            <OrderBook bids={book?.bids ?? []} asks={book?.asks ?? []} depth={20} />
+          )}
+        </div>
       </div>
-
+      {/* Optional: your live trades panel */}
       <div className="lg:col-span-1">
         <div className="h-[70vh]">
           <TradeTicker data={trades || []} />
         </div>
       </div>
+      <AddOrderForm/>
+      <ModifyCancelForm/>
     </div>
   );
 }
