@@ -51,10 +51,12 @@ export default function OrderBook({
     bids,
     asks,
     depth = 20,
+    error
 }: {
     bids: OrderBookLevel[];
     asks: OrderBookLevel[];
     depth?: number;
+    error: Error | null
 }) {
     // Ensure sort (defensive if backend doesn’t sort)
     const asksSorted = React.useMemo(
@@ -81,6 +83,11 @@ export default function OrderBook({
                     Spread: <span className="tabular-nums">{fmt(spread)}</span>
                 </div>
             </div>
+
+            {error != null && (
+                <Card className="p-4 text-sm text-red-600">Failed to load order book: {(error as Error).message}</Card>
+            )}
+
             <Separator className="my-2" />
 
             <div className="grid grid-cols-2 gap-3">

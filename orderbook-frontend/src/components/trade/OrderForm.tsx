@@ -7,8 +7,9 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Select, SelectTrigger, SelectContent, SelectItem, SelectValue } from "@/components/ui/select";
+import { cn } from "@/lib/utils";
 
-export function AddOrderForm() {
+export function AddOrderForm({ className }: { className?: string }) {
   const [side, setSide] = React.useState<"BID" | "ASK">("BID");
   const [type, setType] = React.useState<OrderTypeString>("LIMIT");
   const [price, setPrice] = React.useState<string>("0");
@@ -26,7 +27,7 @@ export function AddOrderForm() {
   };
 
   return (
-    <Card className="p-4 space-y-3">
+    <Card className={cn("p-4 space-y-3",className)}>
       <div className="font-semibold">Add Order</div>
       <div className="grid grid-cols-2 gap-3">
         <div>
