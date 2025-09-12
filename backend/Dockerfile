@@ -2,12 +2,14 @@
 FROM golang:1.25-alpine AS build  
 WORKDIR /app  
 
-COPY /backend/go.mod /backend/go.sum ./
-RUN go mod vendor && go mod tidy
+RUN apk add --no-cache build-base  
+
+COPY backend ./backend
 
 # Copy all
 COPY . .  
-RUN apk add --no-cache build-base  
+RUN cd backend/ && go mod vendor && go mod tidy
+
 
 # Build
 WORKDIR /app/backend/cmd  
