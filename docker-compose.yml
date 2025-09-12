@@ -2,7 +2,7 @@ services:
   tigerbeetle_0:
     container_name: tigerbeetle_0
     image: ghcr.io/tigerbeetle/tigerbeetle
-    command: "start --addresses=0.0.0.0:3001,0.0.0.0:3002,0.0.0.0:3003 /data/0_0.tigerbeetle"
+    command: "start --addresses=0.0.0.0:3001 /data/0_0.tigerbeetle"
     networks: [appnet]
     cap_add:   
       - IPC_LOCK
