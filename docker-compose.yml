@@ -36,6 +36,8 @@ services:
     depends_on:
       - postgres
       - tigerbeetle_0
+    security_opt:
+      - "seccomp=unconfined"
     environment:
       DB_HOST: ${DB_HOST:-postgres}
       DB_PORT: ${DB_PORT:-5432}
