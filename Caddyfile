@@ -1,8 +1,3 @@
-myorderbook.example.com {
+api.orderbook.shadiq.id {
     reverse_proxy orderbook:8080  # forward web requests to the Go app
-}
-
-# (Optional) Plausible analytics UI on a subdomain:
-analytics.example.com {
-    reverse_proxy plausible:8000  # forward to Plausible service
 }
