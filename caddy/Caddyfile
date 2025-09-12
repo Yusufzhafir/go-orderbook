@@ -1,0 +1,3 @@
+be.orderbook.shadiq.id {
+    reverse_proxy orderbook:8080
+}

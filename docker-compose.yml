@@ -47,8 +47,7 @@ services:
       TB_ADDRESS : ${TB_ADDRESS:-3001}
       TB_CLUSTER_ID: ${TB_CLUSTER_ID:-1}
     ports:
-      - "8080:8080"  # optional: expose port 8080 on host (for direct testing if needed)
-                     # Not strictly required since Caddy will proxy traffic.
+      - "8080:8080"
     restart: unless-stopped
     networks: [appnet]
   
@@ -57,17 +56,21 @@ services:
     container_name: caddy_proxy
     depends_on:
       - orderbook
-      # - plausible   # (if you add Plausible later)
     ports:
       - "80:80"
       - "443:443"
       - "443:443/udp"
     networks: [appnet]
     volumes:
-      - ./Caddyfile:/etc/caddy/Caddyfile  # mount your Caddyfile configuration
+      - ./caddy/Caddyfile:/etc/caddy/Caddyfile
+      - caddy_data:/data
+      - caddy_config:/config
     restart: unless-stopped
 
 
+volumes:
+  caddy_data:
+  caddy_config:
 
 networks:
   appnet:

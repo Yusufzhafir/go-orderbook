@@ -1,3 +1,0 @@
-api.orderbook.shadiq.id {
-    reverse_proxy orderbook:8080  # forward web requests to the Go app
-}
