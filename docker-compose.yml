@@ -45,7 +45,7 @@ services:
       DB_PASSWORD: ${DB_PASSWORD:-mypassword}
       DB_NAME: ${DB_NAME:-orderbook_db}
       TB_ADDRESS : ${TB_ADDRESS:-3001}
-      TB_CLUSTER_ID: ${TB_CLUSTER_ID:-0}
+      TB_CLUSTER_ID: ${TB_CLUSTER_ID:-1}
     ports:
       - "8080:8080"  # optional: expose port 8080 on host (for direct testing if needed)
                      # Not strictly required since Caddy will proxy traffic.
