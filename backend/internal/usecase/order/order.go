@@ -57,6 +57,7 @@ type OrderUseCaseOpts struct {
 	OrderBookEngine engine.OrderBookEngine
 
 	TBClusterAddrs []string // e.g., []string{"3000"}
+	TBClusterId    int      // e.g., []string{"3000"}
 
 	TBLedgerID uint32 // e.g., 1
 
@@ -67,6 +68,7 @@ func NewOrderUseCase(ctx context.Context, opts OrderUseCaseOpts) (OrderUseCase, 
 
 	// In TigerBeetle, you create the client once and reuse
 
+	log.Default().Printf("this is tiger beetle address %v", opts.TBClusterAddrs)
 	client, err := tb.NewClient(ToUint128(0), opts.TBClusterAddrs)
 
 	if err != nil {

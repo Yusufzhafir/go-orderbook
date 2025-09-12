@@ -11,3 +11,54 @@ services:
       - "seccomp=unconfined"
     ports:
       - "3000:3001"
+
+  postgres:
+    image: postgres:15-alpine
+    container_name: postgres_db
+    restart: unless-stopped
+    environment:
+      - POSTGRES_USER=myuser  
+      - POSTGRES_PASSWORD=mypassword  
+      - POSTGRES_DB=orderbook_db
+      - TB_ADDRESS=tigerbeetle_0:3000
+      - TB_CLUSTER_ID=0
+    volumes:
+      - ./db/data:/var/lib/postgresql/data
+      - ./db/init.sql:/docker-entrypoint-initdb.d/init.sql
+
+  orderbook:
+    build:
+      context: .
+      dockerfile: ./backend/Dockerfile
+    container_name: orderbook_app
+    depends_on:
+      - postgres
+      - tigerbeetle_0
+    environment:
+      # Database connection settings (adjust values as needed)
+      - DB_HOST=postgres
+      - DB_PORT=5432
+      - DB_USER=myuser
+      - DB_PASSWORD=mypassword
+      - DB_NAME=orderbook_db
+      - TB_ADDRESS=tigerbeetle_0:3001
+      - TB_CLUSTER_ID=0
+    ports:
+      - "8080:8080"  # optional: expose port 8080 on host (for direct testing if needed)
+                     # Not strictly required since Caddy will proxy traffic.
+    restart: unless-stopped
+  
+  caddy:
+    image: caddy:latest
+    container_name: caddy_proxy
+    depends_on:
+      - orderbook
+      # - plausible   # (if you add Plausible later)
+    ports:
+      - "80:80"
+      - "443:443"
+    volumes:
+      - ./Caddyfile:/etc/caddy/Caddyfile  # mount your Caddyfile configuration
+    restart: unless-stopped
+
+

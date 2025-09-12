@@ -115,4 +115,12 @@ func BindRouter(opts BindRouterOpts) {
 	bindOrder(opts.ServerRouter, opts.OrderUseCase)
 	bindUser(opts.ServerRouter)
 	bindTicker(opts.ServerRouter, opts.OrderUseCase)
+
+	//healthcheck
+	opts.ServerRouter.Handle("GET /healthz", logging(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		writeJSON(w, http.StatusOK, map[string]interface{}{
+			"status": 200,
+			"health": "healthy",
+		})
+	})))
 }

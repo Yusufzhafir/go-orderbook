@@ -8,6 +8,7 @@ import (
 	"net/http"
 	"os"
 	"os/signal"
+	"strconv"
 	"syscall"
 	"time"
 
@@ -47,10 +48,23 @@ func main() {
 
 	ob := engine.NewOrderBookEngine()
 	ob.Initialize()
+
+	tbAdress := os.Getenv("TB_ADDRESS")
+	if tbAdress == "" {
+		tbAdress = "3000"
+	}
+
+	tbClusterId, err := strconv.Atoi(os.Getenv("TB_CLUSTER_ID"))
+
+	if err != nil {
+		tbClusterId = 0
+	}
+
 	usecaseOpts := order.OrderUseCaseOpts{
 		OrderBookEngine: ob,
-		TBClusterAddrs:  []string{"3000"},
+		TBClusterAddrs:  []string{tbAdress},
 		TBLedgerID:      uint32(0),
+		TBClusterId:     tbClusterId,
 		EscrowAccount:   types.BigIntToUint128(*big.NewInt(1)),
 	}
 	orderUseCase, err := order.NewOrderUseCase(rootCtx, usecaseOpts)
