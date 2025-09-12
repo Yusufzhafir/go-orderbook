@@ -54,7 +54,7 @@ func main() {
 		tbAdress = "3000"
 	}
 
-	tbClusterId, err := strconv.Atoi(os.Getenv("TB_CLUSTER_ID"))
+	tbClusterId, err := strconv.ParseUint(os.Getenv("TB_CLUSTER_ID"), 0, 64)
 
 	if err != nil {
 		tbClusterId = 0

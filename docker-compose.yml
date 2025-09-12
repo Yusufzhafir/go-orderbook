@@ -1,8 +1,9 @@
 services:
   tigerbeetle_0:
     container_name: tigerbeetle_0
-    image: ghcr.io/tigerbeetle/tigerbeetle:debug
+    image: ghcr.io/tigerbeetle/tigerbeetle
     command: "start --addresses=0.0.0.0:3001,0.0.0.0:3002,0.0.0.0:3003 /data/0_0.tigerbeetle"
+    networks: [appnet]
     cap_add:   
       - IPC_LOCK
     volumes:
@@ -17,14 +18,15 @@ services:
     container_name: postgres_db
     restart: unless-stopped
     environment:
-      - POSTGRES_USER=myuser  
-      - POSTGRES_PASSWORD=mypassword  
-      - POSTGRES_DB=orderbook_db
-      - TB_ADDRESS=tigerbeetle_0:3000
-      - TB_CLUSTER_ID=0
+      POSTGRES_USER: ${POSTGRES_USER:-myuser}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-mypassword}
+      POSTGRES_DB: ${POSTGRES_DB:-orderbook_db}
+      TB_ADDRESS: ${TB_ADDRESS:-3001}
+      TB_CLUSTER_ID: ${TB_CLUSTER_ID:-1}
     volumes:
       - ./db/data:/var/lib/postgresql/data
       - ./db/init.sql:/docker-entrypoint-initdb.d/init.sql
+    networks: [appnet]
 
   orderbook:
     build:
@@ -35,18 +37,18 @@ services:
       - postgres
       - tigerbeetle_0
     environment:
-      # Database connection settings (adjust values as needed)
-      - DB_HOST=postgres
-      - DB_PORT=5432
-      - DB_USER=myuser
-      - DB_PASSWORD=mypassword
-      - DB_NAME=orderbook_db
-      - TB_ADDRESS=tigerbeetle_0:3001
-      - TB_CLUSTER_ID=0
+      DB_HOST: ${DB_HOST:-postgres}
+      DB_PORT: ${DB_PORT:-5432}
+      DB_USER: ${DB_USER:-myuser}
+      DB_PASSWORD: ${DB_PASSWORD:-mypassword}
+      DB_NAME: ${DB_NAME:-orderbook_db}
+      TB_ADDRESS : ${TB_ADDRESS:-3001}
+      TB_CLUSTER_ID: ${TB_CLUSTER_ID:-0}
     ports:
       - "8080:8080"  # optional: expose port 8080 on host (for direct testing if needed)
                      # Not strictly required since Caddy will proxy traffic.
     restart: unless-stopped
+    networks: [appnet]
   
   caddy:
     image: caddy:latest
@@ -62,3 +64,7 @@ services:
     restart: unless-stopped
 
 
+
+networks:
+  appnet:
+    driver: bridge

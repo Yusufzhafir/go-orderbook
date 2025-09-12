@@ -94,7 +94,7 @@ func (o *orderBookEngineImpl) matchOrder() []*model.Trade {
 
 			bestQuantity := min(askOrder.GetRemainingQuantity(), bidOrder.GetRemainingQuantity())
 			bestPrice := min(askOrder.GetPrice(), bidOrder.GetPrice())
-			if bidsPriceLevel.Price >= asksPriceLevel.Price {
+			if askOrder.GetPrice() <= bidOrder.GetPrice() {
 				bestPrice = max(askOrder.GetPrice(), bidOrder.GetPrice())
 			}
 			askOrder.Fill(bestQuantity)
@@ -113,6 +113,8 @@ func (o *orderBookEngineImpl) matchOrder() []*model.Trade {
 			}
 			trades = append(trades, &trade)
 
+			asksPriceLevel.TotalVolume -= bestQuantity
+			bidsPriceLevel.TotalVolume -= bestQuantity
 			if askOrder.IsFilled() {
 				delete(o.orders, askOrder.GetId())
 				asksPriceLevel.Orders = asksPriceLevel.Orders[1:] // Pop front
@@ -121,8 +123,6 @@ func (o *orderBookEngineImpl) matchOrder() []*model.Trade {
 				delete(o.orders, bidOrder.GetId())
 				bidsPriceLevel.Orders = bidsPriceLevel.Orders[1:]
 			}
-			asksPriceLevel.TotalVolume -= bestQuantity
-			bidsPriceLevel.TotalVolume -= bestQuantity
 
 			if len(asksPriceLevel.Orders) == 0 {
 				o.asks.Delete(asksPriceLevel)

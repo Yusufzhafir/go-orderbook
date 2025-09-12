@@ -95,8 +95,8 @@ export default function OrderBook({
                 <div className="rounded border p-2">
                     <div className="grid grid-cols-3 text-xs font-medium opacity-70 px-2">
                         <div>Size</div>
-                        <div className="text-right">Price</div>
-                        <div className="text-right">Total</div>
+                        <div className="text-right">Price (USD)</div>
+                        <div className="text-right">Total (USD)</div>
                     </div>
                     <div className="mt-1 space-y-0.5">
                         {bidsSorted.map((lvl, i) => (
@@ -110,8 +110,8 @@ export default function OrderBook({
                 <div className="rounded border p-2">
                     <div className="grid grid-cols-3 text-xs font-medium opacity-70 px-2">
                         <div>Size</div>
-                        <div className="text-right">Price</div>
-                        <div className="text-right">Total</div>
+                        <div className="text-right">Price (USD)</div>
+                        <div className="text-right">Total (USD)</div>
                     </div>
                     <div className="mt-1 space-y-0.5">
                         {asksSorted.map((lvl, i) => (

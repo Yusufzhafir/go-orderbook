@@ -14,7 +14,13 @@ export function AddOrderForm({ className }: { className?: string }) {
   const [type, setType] = React.useState<OrderTypeString>("LIMIT");
   const [price, setPrice] = React.useState<string>("0");
   const [qty, setQty] = React.useState<string>("1");
-
+  const orderCost = React.useMemo(()=>{
+    const total = Number.parseInt(price)*Number.parseInt(qty)
+    if (Number.isNaN(total)) {
+      return 0
+    }
+    return total
+  },[price,qty])
   const m = useMutation({ mutationFn: api.addOrder, onSuccess: (r) => alert(`${r.status}: ${r.orderId} ${r.message ?? ""}`), onError: (e) => alert(e.message) });
 
   const submit = () => {
@@ -53,11 +59,12 @@ export function AddOrderForm({ className }: { className?: string }) {
             </SelectContent>
           </Select>
         </div>
-        <div>
-          <Label>Price</Label>
+        <div className="flex flex-col gap-2">
+          <Label> (USD)</Label>
           <Input type="number" inputMode="numeric" value={price} onChange={(e) => setPrice(e.target.value)} />
+          <Label> cost {orderCost}</Label>
         </div>
-        <div>
+        <div className="flex flex-col gap-2">
           <Label>Quantity</Label>
           <Input type="number" inputMode="numeric" value={qty} onChange={(e) => setQty(e.target.value)} />
         </div>
