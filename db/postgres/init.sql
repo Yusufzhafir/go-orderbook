@@ -48,5 +48,5 @@ CREATE TABLE trades (
     type    SMALLINT  NOT NULL,               
     quantity BIGINT   NOT NULL,
     price    BIGINT   NOT NULL,
-    traded_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+    traded_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
 );

@@ -10,6 +10,8 @@ import (
 	"syscall"
 
 	userLedgerRepository "github.com/Yusufzhafir/go-orderbook/backend/internal/repository/ledger"
+	"github.com/Yusufzhafir/go-orderbook/backend/pkg/model"
+
 	// userRepository "github.com/Yusufzhafir/go-orderbook/backend/internal/repository/user"
 	// "github.com/Yusufzhafir/go-orderbook/backend/internal/usecase/user"
 	"github.com/jmoiron/sqlx"
@@ -54,26 +56,59 @@ func main() {
 		return
 	}
 
+	type LedgerInit struct {
+		Ticker   string
+		LedgerId int
+	}
+	ledgerList := []LedgerInit{
+		{
+			Ticker:   model.CASH_TICKER,
+			LedgerId: model.CASH_LEDGER,
+		},
+		{
+			Ticker:   "BBCAUSD",
+			LedgerId: 20,
+		},
+		{
+			Ticker:   "BTCUSD",
+			LedgerId: 30,
+		},
+	}
 	userLedgerRepo := userLedgerRepository.NewLedgerRepository(db)
-
 	rootTx := db.MustBeginTx(rootCtx, nil)
 	defer rootTx.Rollback()
-	escrowAccountId := tbTypes.ID()
-	usdTBLedger := 10
-	errList, err := client.CreateAccounts([]tbTypes.Account{
-		{
+
+	escrowAccounts := make([]tbTypes.Account, 0, 3)
+	for i, ledgerItem := range ledgerList {
+		escrowAccountId := tbTypes.ID()
+		accountId := escrowAccountId.BigInt()
+		_, err := userLedgerRepo.CreateLedger(rootCtx, rootTx, ledgerItem.Ticker, int64(ledgerItem.LedgerId), accountId.String())
+		if err != nil {
+			log.Fatalf("error creating ledger: %v", err)
+			return
+		}
+		isLinked := true
+		if i == len(ledgerList)-1 {
+			isLinked = false
+		}
+		escrowAccounts = append(escrowAccounts, tbTypes.Account{
 			ID:     escrowAccountId,
 			Code:   1001,
-			Ledger: uint32(usdTBLedger),
+			Ledger: uint32(ledgerItem.LedgerId),
 			Flags: tbTypes.AccountFlags{
-				History:                    true,
+				Linked:                     isLinked,
 				CreditsMustNotExceedDebits: true,
+				History:                    true,
 			}.ToUint16(),
-		},
-	})
+		})
+	}
+
+	errList, err := client.CreateAccounts(escrowAccounts)
+
 	if err != nil {
 		log.Fatalf("error creating accounts: %v", err)
 	}
+
 	if len(errList) > 0 {
 		for i, accountError := range errList {
 			log.Printf("on index %d, we got this error: %v", i, accountError)
@@ -92,62 +127,15 @@ func main() {
 
 	queryResult, err := client.QueryAccounts(
 		tbTypes.QueryFilter{
-			Ledger: uint32(usdTBLedger),
-			Limit:  1000,
+			Code:  1001,
+			Limit: 1000,
 		},
 	)
 	if err != nil {
 		log.Fatalf("error fetching accounts: %v", err)
 	}
-	// if len(errList) > 0 {
-	// 	for i, accountError := range errList {
-	// 		log.Printf("on index %d, we got this error: %v", i, accountError)
-	// 	}
-	// 	log.Fatalf("error creating accounts: %v", err)
-	// }
 	log.Printf("this is existing accounts in ledger %v", queryResult)
 	rootTx.Commit()
-
-	// userRepo := userRepository.NewUserRepository(db)
-	// userUseCaseOpts := user.UserUseCaseOpts{
-	// 	UserRepo:   &userRepo,
-	// 	LedgerRepo: &userLedgerRepo,
-	// 	TbClient:   &client,
-	// 	Db:         db,
-	// }
-
-	// userUseCase := user.NewUserUseCase(userUseCaseOpts)
-
-	// newUser, err := userUseCase.Register(rootCtx, "yusufshadiqqqq", "1231233")
-
-	// if err != nil {
-	// 	log.Fatalf("error creating user: %v", err)
-	// }
-
-	// account, err := client.QueryAccounts(tbTypes.QueryFilter{
-	// 	Ledger: uint32(result.LedgerTbId),
-	// })
-	// if err != nil {
-	// 	log.Fatalf("error getting account: %v", err)
-	// }
-	// log.Printf("ACCOUNT RESULT %v", account)
-
-	// ledgerTB, err := userUseCase.GetUserLedger(rootCtx, newUser, 13)
-	// if err != nil {
-	// 	log.Fatalf("error fetching ledger: %v", err)
-	// }
-	// convert, err := stringToUint128(ledgerTB.TBAccountID)
-	// if err != nil {
-	// 	log.Fatalf("error converting: %v", err)
-	// }
-	// account2, err := client.LookupAccounts([]tbTypes.Uint128{
-	// 	convert, //->string
-	// })
-	// if err != nil {
-	// 	log.Fatalf("error getting account2: %v", err)
-	// }
-	// log.Printf("ACCOUNT RESULT %v", account2)
-
 }
 
 func stringToUint128(s string) (tbTypes.Uint128, error) {
