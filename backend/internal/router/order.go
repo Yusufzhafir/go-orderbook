@@ -30,6 +30,7 @@ func (or *orderRouterImpl) Add(w http.ResponseWriter, r *http.Request) {
 		Price    model.Price     `json:"price"`
 		Quantity model.Quantity  `json:"quantity"`
 		Type     model.OrderType `json:"type"` // e.g., LIMIT, MARKET, FOK, IOC, etc.
+		Ticker   string          `json:"ticker"`
 		// Optional: ClientOrderID string `json:"clientOrderId,omitempty"`
 	}
 	type AddOrderResponse struct {
@@ -51,7 +52,7 @@ func (or *orderRouterImpl) Add(w http.ResponseWriter, r *http.Request) {
 	}
 
 	uc := *or.usecase
-	trades, orderID, err := uc.AddOrder(r.Context(), req.Side, req.Price, req.Quantity, req.Type)
+	trades, orderID, err := uc.AddOrder(r.Context(), req.Ticker, req.Side, req.Price, req.Quantity, req.Type)
 	if err != nil {
 		writeJSON(w, http.StatusUnprocessableEntity, AddOrderResponse{
 			Status:  "rejected",

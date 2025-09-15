@@ -2,22 +2,24 @@ package order
 
 import (
 	"context"
-
 	"fmt"
-
 	"log"
-
+	"math/big"
 	"time"
 
 	"github.com/Yusufzhafir/go-orderbook/backend/internal/engine"
+	ledgerRepository "github.com/Yusufzhafir/go-orderbook/backend/internal/repository/ledger"
+	orderRepository "github.com/Yusufzhafir/go-orderbook/backend/internal/repository/order"
+	"github.com/Yusufzhafir/go-orderbook/backend/internal/router/middleware"
 	"github.com/Yusufzhafir/go-orderbook/backend/pkg/model"
+	"github.com/jmoiron/sqlx"
 
 	tb "github.com/tigerbeetle/tigerbeetle-go"
 	. "github.com/tigerbeetle/tigerbeetle-go/pkg/types"
 )
 
 type OrderUseCase interface {
-	AddOrder(ctx context.Context, side model.Side, price model.Price, quantity model.Quantity, orderType model.OrderType) (trades []*model.Trade, orderID model.OrderId, err error)
+	AddOrder(ctx context.Context, ticker string, side model.Side, price model.Price, quantity model.Quantity, orderType model.OrderType) (trades []*model.Trade, orderID model.OrderId, err error)
 
 	CancelOrder(ctx context.Context, orderID model.OrderId) error
 
@@ -48,6 +50,9 @@ type orderUseCaseImpl struct {
 	escrowAccount Uint128
 
 	tradeHandler TradeHandler
+	orderRepo    *orderRepository.OrderRepository
+	ledgerRepo   *ledgerRepository.LedgerRepository
+	db           *sqlx.DB
 }
 
 // NewOrderUseCase constructs with an already-initialized TB client.
@@ -55,36 +60,30 @@ type TradeHandler func(model.Trade)
 
 type OrderUseCaseOpts struct {
 	OrderBookEngine engine.OrderBookEngine
-
-	TBClusterAddrs []string // e.g., []string{"3000"}
-	TBClusterId    uint64   // e.g., []string{"3000"}
-
-	TBLedgerID uint32 // e.g., 1
-
-	EscrowAccount Uint128
+	TBClusterAddrs  []string
+	TBClusterId     uint64
+	TBLedgerID      uint32
+	EscrowAccount   Uint128 // (optional global escrow, but we'll use per-ticker escrow accounts)
+	OrderRepo       *orderRepository.OrderRepository
+	LedgerRepo      *ledgerRepository.LedgerRepository
+	Db              *sqlx.DB
 }
 
 func NewOrderUseCase(ctx context.Context, opts OrderUseCaseOpts) (OrderUseCase, error) {
-
-	// In TigerBeetle, you create the client once and reuse
-
-	log.Default().Printf("this is tiger beetle address %v clusterId %v", opts.TBClusterAddrs, opts.TBClusterId)
+	// Initialize TigerBeetle client (unchanged)
 	client, err := tb.NewClient(ToUint128(opts.TBClusterId), opts.TBClusterAddrs)
-
 	if err != nil {
-
 		return nil, fmt.Errorf("tigerbeetle client init: %w", err)
-
 	}
-
-	// optionally: ping to ensure connection
 	return &orderUseCaseImpl{
 		orderBookEngine: opts.OrderBookEngine,
 		tbClient:        &client,
 		ledgerID:        opts.TBLedgerID,
 		escrowAccount:   opts.EscrowAccount,
+		orderRepo:       opts.OrderRepo,
+		ledgerRepo:      opts.LedgerRepo,
+		db:              opts.Db,
 	}, nil
-
 }
 
 func (ou *orderUseCaseImpl) RegisterTradeHandler(handler TradeHandler) {
@@ -92,79 +91,339 @@ func (ou *orderUseCaseImpl) RegisterTradeHandler(handler TradeHandler) {
 }
 
 // AddOrder writes any necessary pre-commit ledger entries (e.g., reserve funds), then submits to engine.
+func (ou *orderUseCaseImpl) AddOrder(ctx context.Context, ticker string, side model.Side, price model.Price, quantity model.Quantity, orderType model.OrderType) ([]*model.Trade, model.OrderId, error) {
 
-func (ou *orderUseCaseImpl) AddOrder(ctx context.Context, side model.Side, price model.Price, quantity model.Quantity, orderType model.OrderType) ([]*model.Trade, model.OrderId, error) {
+	orderID := model.OrderId(time.Now().UnixMilli())
+	userID := *(ctx.Value(middleware.AuthKey{}).(*middleware.UserClaims))
 
-	// Generate an order ID. If your engine assigns IDs, call into it; otherwise generate here.
+	// Reserve funds for GTC orders (if needed)
+	tx := ou.db.MustBeginTx(ctx, nil)
+	defer tx.Rollback()
 
-	// Using TigerBeetle’s ID() is fine to produce unique 128-bit values; map to your OrderId type.
-
-	orderID := model.OrderId(model.OrderId(time.Now().UnixMilli())) // or map properly to your type
-
-	// Example: reserve funds for a LIMIT BUY by debiting user cash -> credit escrow
-	// and for a LIMIT SELL, reserve asset -> credit escrow. Adjust to your accounting model.
-	// For demo, assume you can map from context to a user account:
-	// userCash := uint64(10) // Uint128
-	// userAsset := 10        // Uint128
-
-	// Optional reservation for non-market/IOC orders:
-	// if orderType == model.ORDER_GOOD_TILL_CANCEL {
-	// 	if side == model.BID {
-	// 		amount := toTigerBeetleUnitsCash(price, quantity) // compute cash = price * qty in integer smallest units
-	// 		if err := ou.reserveFunds(ctx, userCash, ou.escrowAccount, amount, 1001 /*code*/); err != nil {
-	// 			return nil, 0, err
-	// 		}
-	// 	} else if side == model.ASK {
-	// 		amount := toTigerBeetleUnitsAsset(quantity)
-	// 		if err := ou.reserveFunds(ctx, userAsset, ou.escrowAccount, amount, 1002); err != nil {
-	// 			return nil, 0, err
-	// 		}
-	// 	}
-	// }
-
-	// Submit to engine
-	newOrder := model.NewOrder(
-		orderID,
-		side,
-		price,
-		quantity,
-		orderType,
-	)
-	trades, err := ou.orderBookEngine.AddOrder(newOrder)
+	tickereLedger, err := (*ou.ledgerRepo).GetLedgerByTicker(ctx, tx, ticker)
 	if err != nil {
-		return nil, newOrder.GetId(), err
+		return nil, 0, err
+	}
+	tickerID := tickereLedger.ID
+
+	if orderType == model.ORDER_GOOD_TILL_CANCEL {
+		assetTicker, err := (*ou.ledgerRepo).GetLedgerByID(ctx, tx, tickerID)
+		if err != nil {
+			return nil, 0, fmt.Errorf("failed to get asset ticker: %w", err)
+		}
+		quoteTicker, err := (*ou.ledgerRepo).GetLedgerByTicker(ctx, tx, "USD") // replace "USD" with your quote currency
+		if err != nil {
+			return nil, 0, fmt.Errorf("failed to get quote ticker: %w", err)
+		}
+		// Fetch user's ledger accounts for reservation
+		switch side {
+		case model.BID:
+			// Reserve fiat: debit user's currency account, credit currency escrow
+			userCashAcct, err := (*ou.ledgerRepo).GetUserLedger(ctx, tx, userID.UserId, quoteTicker.ID)
+			if err != nil {
+				return nil, 0, err
+			}
+			// Amount = price * quantity (in smallest currency units)
+			cashAmount := big.NewInt(1).Mul(big.NewInt(int64(price)), big.NewInt(int64(quantity)))
+			userCashTb, err := stringToUint128(userCashAcct.TBAccountID)
+			if err != nil {
+				return nil, 0, err
+			}
+			tickerEscrow, err := stringToUint128(quoteTicker.EscrowAccountID)
+			if err != nil {
+				return nil, 0, err
+			}
+			err = ou.reserveFunds(ctx,
+				userCashTb,   // user's fiat account (debit)
+				tickerEscrow, // quote currency escrow account (credit)
+				BigIntToUint128(*cashAmount), 1001)
+			if err != nil {
+				return nil, 0, fmt.Errorf("fund reservation failed: %w", err)
+			}
+		case model.ASK:
+			userAssetAcct, err := (*ou.ledgerRepo).GetUserLedger(ctx, tx, userID.UserId, assetTicker.ID)
+			if err != nil {
+				return nil, 0, err
+			}
+			assetQty := big.NewInt(1).SetUint64(uint64(quantity))
+			userAssetb, err := stringToUint128(userAssetAcct.TBAccountID)
+			if err != nil {
+				return nil, 0, err
+			}
+			tickerEscrow, err := stringToUint128(assetTicker.EscrowAccountID)
+			if err != nil {
+				return nil, 0, err
+			}
+			err = ou.reserveFunds(ctx,
+				userAssetb,
+				tickerEscrow,
+				BigIntToUint128(*assetQty), 1002)
+			if err != nil {
+				return nil, 0, fmt.Errorf("asset reservation failed: %w", err)
+			}
+		}
 	}
 
-	// For each trade, settle funds atomically in TB (batch transfers).
-	// Example settlement:
-	for _, trade := range trades {
-		if ou.tradeHandler != nil {
-			ou.tradeHandler(*trade)
+	// 3. Persist the new order in the database
+	newOrderRecord := orderRepository.OrderRecord{
+		ID:             uint64(orderID),
+		UserID:         userID.UserId,
+		TickerID:       tickerID,
+		Side:           int8(side),
+		TickerLedgerID: int64(ou.ledgerID),
+		Type:           uint8(orderType),
+		Quantity:       uint64(quantity),
+		Price:          uint64(price),
+		IsActive:       true,
+	}
+
+	err = (*ou.orderRepo).CreateOrder(ctx, tx, newOrderRecord)
+	if err != nil {
+		return nil, 0, fmt.Errorf("inserting order: %w", err)
+	}
+
+	// 4. Submit order to matching engine
+	engineOrder := model.NewOrder(orderID, side, price, quantity, orderType)
+	matchedTrades, matchErr := ou.orderBookEngine.AddOrder(engineOrder)
+	if matchErr != nil {
+		return nil, orderID, matchErr
+	}
+
+	// 5. Handle each resulting trade
+	for _, tr := range matchedTrades {
+		// Determine roles: identify which order was taker vs maker
+		takerOrderID := tr.TakerID
+		makerOrderID := tr.MakerID
+		takerOrderType := orderType // by default assume the current order is taker
+		var buyerID, sellerID int64
+		var buyerAssetAcct, sellerCashAcct *ledgerRepository.UserLedger
+
+		// Check if our new order was the taker or maker in this trade
+		if takerOrderID == orderID {
+			// Our new order is the taker
+			if side == model.BID {
+				// New order is a BUY taker -> buyer is current user, seller is maker order’s user
+				buyerID = userID.UserId
+				// fetch maker order's user (seller)
+				makerOrderRec, _ := (*ou.orderRepo).GetOrderByID(ctx, tx, uint64(makerOrderID))
+				sellerID = makerOrderRec.UserID
+			} else {
+				// New order is a SELL taker -> seller is current user, buyer is maker order’s user
+				sellerID = userID.UserId
+				makerOrderRec, _ := (*ou.orderRepo).GetOrderByID(ctx, tx, uint64(makerOrderID))
+				buyerID = makerOrderRec.UserID
+			}
+			takerOrderType = orderType
+		} else {
+			// Our new order was placed into book and the other order was taker (scenario: our order was GTC and got matched by an incoming IOC from opposite side).
+			// In this case, the trade’s taker is the other order.
+			// Determine buyer/seller based on the trade Side flag.
+			if tr.Side == model.ASK {
+				// Trade side ASK => taker was a sell order (the other user is seller, current user is buyer)
+				buyerID = userID.UserId
+				// taker (seller) is other user:
+				takerOrderRec, _ := (*ou.orderRepo).GetOrderByID(ctx, tx, uint64(takerOrderID))
+				sellerID = takerOrderRec.UserID
+				takerOrderType = model.OrderType(takerOrderRec.Type)
+			} else {
+				// Trade side BID => taker was a buy order (the other user is buyer, current user is seller)
+				sellerID = userID.UserId
+				takerOrderRec, _ := (*ou.orderRepo).GetOrderByID(ctx, tx, uint64(takerOrderID))
+				buyerID = takerOrderRec.UserID
+				takerOrderType = model.OrderType(takerOrderRec.Type)
+			}
 		}
-		if err := ou.settleTrades(ctx, trades); err != nil {
-			// Settlement error handling policy is up to you:
-			// - If engine already matched, you need compensating actions or design a 2-phase approach.
+
+		// Fetch buyer’s asset account and seller’s cash account (for settlement)
+		assetLedgerID := int64(ou.ledgerID) //TODO fetch ticker ledger id
+		quoteLedgerID := int64(10)          /* quote currency ticker ID, e.g., quoteTicker.ID */
+		buyerAssetAcct, err = (*ou.ledgerRepo).GetUserLedger(ctx, tx, buyerID, assetLedgerID)
+		if err != nil {
+			return nil, orderID, err
+		}
+		sellerCashAcct, err = (*ou.ledgerRepo).GetUserLedger(ctx, tx, sellerID, quoteLedgerID)
+		if err != nil {
+			return nil, orderID, err
+		}
+
+		// TigerBeetle settlement transfers (escrow -> buyer/seller accounts)
+		// Prepare transfer amounts
+		cashAmount := big.NewInt(0).Mul(big.NewInt(int64(tr.Price)), big.NewInt(int64(tr.Quantity)))
+		assetAmount := big.NewInt(int64(tr.Quantity))
+		// Prepare escrow accounts (from ticker records)
+		assetTicker, _ := (*ou.ledgerRepo).GetLedgerByID(ctx, tx, assetLedgerID)
+		quoteTicker, _ := (*ou.ledgerRepo).GetLedgerByID(ctx, tx, quoteLedgerID)
+		assetEscrow, err := stringToUint128(assetTicker.EscrowAccountID)
+		if err != nil {
+			return nil, orderID, err
+		}
+
+		quoteEscrow, err := stringToUint128(quoteTicker.EscrowAccountID)
+
+		if err != nil {
+			return nil, orderID, err
+		}
+
+		sellerCashTbId, err := stringToUint128(sellerCashAcct.TBAccountID)
+		if err != nil {
+			return nil, orderID, err
+		}
+		buyerAssetTbId, err := stringToUint128(buyerAssetAcct.TBAccountID)
+		if err != nil {
+			return nil, orderID, err
+		}
+
+		// Create two transfers:
+		transfer1 := Transfer{
+			ID:              ID(),           // generate unique transfer ID:contentReference[oaicite:8]{index=8}
+			DebitAccountID:  quoteEscrow,    // debit quote currency escrow
+			CreditAccountID: sellerCashTbId, // credit seller's fiat account
+			Amount:          BigIntToUint128(*cashAmount),
+			Ledger:          ou.ledgerID,
+			Code:            3001,
+			Timestamp:       uint64(time.Now().UnixNano()),
+		}
+		transfer2 := Transfer{
+			ID:              ID(),
+			DebitAccountID:  assetEscrow,    // debit asset escrow
+			CreditAccountID: buyerAssetTbId, // credit buyer's asset account
+			Amount:          BigIntToUint128(*assetAmount),
+			Ledger:          ou.ledgerID,
+			Code:            3002,
+			Timestamp:       uint64(time.Now().UnixNano()),
+		}
+		// Execute the transfers as a batch
+		results, err := (*ou.tbClient).CreateTransfers([]Transfer{transfer1, transfer2})
+		if err != nil {
 			log.Printf("settlement error: %v", err)
-			// You might alert and reconcile.
+			// Decide how to handle partial failure (compensation or rollback steps if needed)
+		} else if len(results) > 0 {
+			log.Printf("settlement transfer failures: %+v", results)
+		}
+		// Use transfer1's ID as the ledger_transfer_id to record in trade (represents fiat movement)
+		transferTbId := transfer1.ID.BigInt()
+
+		// Record the trade in the database
+		tradeRecord := orderRepository.TradeRecord{
+			TickerID:         tickerID, // asset ticker ID
+			OrderTakerID:     uint64(tr.TakerID),
+			OrderMakerID:     uint64(tr.MakerID),
+			LedgerTransferID: &transferTbId,     // store as big.Int (will be saved as NUMERIC string)
+			UserLedgerID:     sellerCashAcct.ID, // seller's fiat account record ID
+			TickerLedgerID:   buyerAssetAcct.ID, // buyer's asset account record ID
+			Type:             uint8(takerOrderType),
+			Quantity:         uint64(tr.Quantity),
+			Price:            uint64(tr.Price),
+		}
+		err = (*ou.orderRepo).CreateTrade(ctx, tx, tradeRecord)
+		if err != nil {
+			return nil, orderID, fmt.Errorf("inserting trade: %w", err)
+		}
+
+		// Close fully-filled orders: if the taker or maker order is now completely filled, mark as closed
+		// (Check in-memory: engine already removed filled orders. We can also compare filled qty vs initial)
+		if tr.MakerID != 0 {
+			makerOrder, err := (*ou.orderRepo).GetOrderByID(ctx, tx, uint64(tr.MakerID))
+			isMakerOrderFilled := (*makerOrder).Quantity == tradeRecord.Quantity
+			if err == nil && makerOrder != nil && makerOrder.IsActive && isMakerOrderFilled {
+				_ = (*ou.orderRepo).CloseOrder(ctx, tx, makerOrder.ID, time.Now(), false)
+			}
+			return nil, 0, err
+		}
+		if tr.TakerID != 0 {
+			takerOrder, err := (*ou.orderRepo).GetOrderByID(ctx, tx, uint64(tr.TakerID))
+			isTakerOrderFilled := (*takerOrder).Quantity == tradeRecord.Quantity
+			if err == nil && takerOrder != nil && takerOrder.IsActive && isTakerOrderFilled {
+				_ = (*ou.orderRepo).CloseOrder(ctx, tx, takerOrder.ID, time.Now(), false)
+			}
+			return nil, 0, err
 		}
 	}
 
-	return trades, orderID, nil
-
+	// 6. Commit transaction and notify via WebSocket
+	if err := tx.Commit(); err != nil {
+		return nil, orderID, err
+	}
+	// Trigger WebSocket notifications for each trade (already registered in main)
+	for _, tr := range matchedTrades {
+		if ou.tradeHandler != nil {
+			ou.tradeHandler(*tr)
+		}
+	}
+	return matchedTrades, orderID, nil
 }
 
 func (ou *orderUseCaseImpl) CancelOrder(ctx context.Context, orderID model.OrderId) error {
 
-	// If you reserved funds on AddOrder and the order is still open, release here.
-
-	// You’ll need to fetch order details from engine to know side/price/qty remaining and user accounts.
-
-	// Example (pseudo):
-
-	// ord := ou.orderBookEngine.GetOrder(orderID)
-
-	// if ord != nil && ord.RemainingQuantity > 0 { release escrow back to user }
-
+	// Start a transaction to update DB and possibly release funds
+	tx := ou.db.MustBeginTx(ctx, nil)
+	defer tx.Rollback()
+	// Get order details (to know side, remaining quantity, user, etc.)
+	ord, err := (*ou.orderRepo).GetOrderByID(ctx, tx, uint64(orderID))
+	if err != nil {
+		return err
+	}
+	// If order is not already closed and has remaining quantity, release any escrow reservation
+	if ord.IsActive && ord.Quantity > 0 {
+		// Identify asset vs currency based on side
+		tickerRec, _ := (*ou.ledgerRepo).GetLedgerByID(ctx, tx, ord.TickerID)
+		// Assume one quote currency as before
+		quoteRec, _ := (*ou.ledgerRepo).GetLedgerByTicker(ctx, tx, "USD")
+		userID := ord.UserID
+		if model.Side(ord.Side) == model.BID {
+			// Release reserved currency: transfer from escrow back to user's cash account
+			userCashAcct, _ := (*ou.ledgerRepo).GetUserLedger(ctx, tx, userID, quoteRec.ID)
+			userCashAcctLedgerId, err := stringToUint128(userCashAcct.TBAccountID)
+			if err != nil {
+				return err
+			}
+			fiatEscrow, err := stringToUint128(quoteRec.EscrowAccountID)
+			if err != nil {
+				return err
+			}
+			_ = ou.releaseReservationBestEffort(
+				ctx,
+				model.BID,
+				userCashAcctLedgerId,
+				BigIntToUint128(*big.NewInt(0)),
+				model.Quantity(ord.Quantity),
+				model.Price(ord.Price),
+				uint32(quoteRec.TBLedgerID),
+				fiatEscrow,
+			) // (debit from escrow to user)
+		} else {
+			// Release reserved asset: transfer from escrow back to user's asset account
+			userAssetAcct, err := (*ou.ledgerRepo).GetUserLedger(ctx, tx, userID, tickerRec.ID)
+			if err != nil {
+				return err
+			}
+			userAssetAccountId, err := stringToUint128(userAssetAcct.TBAccountID)
+			if err != nil {
+				return err
+			}
+			assetEscrowAccount, err := stringToUint128(tickerRec.EscrowAccountID)
+			if err != nil {
+				return err
+			}
+			_ = ou.releaseReservationBestEffort(
+				ctx,
+				model.ASK,
+				BigIntToUint128(*big.NewInt(0)),
+				userAssetAccountId,
+				model.Quantity(ord.Quantity),
+				model.Price(ord.Price),
+				uint32(quoteRec.TBLedgerID),
+				assetEscrowAccount,
+			)
+		}
+	}
+	// Cancel in the matching engine
+	err = ou.orderBookEngine.CancelOrder(orderID)
+	if err != nil {
+		return err
+	}
+	// Mark order as canceled in DB
+	_ = (*ou.orderRepo).CloseOrder(ctx, tx, uint64(orderID), time.Now(), true)
 	return ou.orderBookEngine.CancelOrder(orderID)
 
 }
@@ -248,9 +507,17 @@ func (ou *orderUseCaseImpl) reserveFunds(ctx context.Context, debit Uint128, cre
 
 }
 
-// releaseReservationBestEffort is an example; tailor as needed.
-
-func (ou *orderUseCaseImpl) releaseReservationBestEffort(ctx context.Context, side model.Side, userCash, userAsset Uint128, qty model.Quantity, price model.Price) error {
+// when user cancel order return back their assets or cash to their account
+func (ou *orderUseCaseImpl) releaseReservationBestEffort(
+	ctx context.Context,
+	side model.Side,
+	userCashAccount,
+	userAssetAccount Uint128,
+	qty model.Quantity,
+	price model.Price,
+	ledger uint32,
+	escrow Uint128,
+) error {
 
 	var debit, credit Uint128
 
@@ -260,17 +527,17 @@ func (ou *orderUseCaseImpl) releaseReservationBestEffort(ctx context.Context, si
 
 	case model.BID:
 
-		debit = ou.escrowAccount
+		debit = escrow
 
-		credit = userCash
+		credit = userCashAccount
 
 		amount = toTigerBeetleUnitsCash(price, qty)
 
 	case model.ASK:
 
-		debit = ou.escrowAccount
+		debit = escrow
 
-		credit = userAsset
+		credit = userAssetAccount
 
 		amount = toTigerBeetleUnitsAsset(qty)
 
@@ -286,7 +553,7 @@ func (ou *orderUseCaseImpl) releaseReservationBestEffort(ctx context.Context, si
 
 		Amount: amount,
 
-		Ledger: ou.ledgerID,
+		Ledger: ledger,
 
 		Code: 2001,
 
