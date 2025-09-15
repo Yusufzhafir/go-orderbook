@@ -1,77 +1,118 @@
 package main
 
 import (
+	"context"
+	"fmt"
 	"log"
+	"math/big"
+	"os"
+	"os/signal"
+	"syscall"
 
-	"github.com/Yusufzhafir/go-orderbook/backend/internal/engine"
-	"github.com/Yusufzhafir/go-orderbook/backend/pkg/model"
+	userLedgerRepository "github.com/Yusufzhafir/go-orderbook/backend/internal/repository/ledger"
+	userRepository "github.com/Yusufzhafir/go-orderbook/backend/internal/repository/user"
+	"github.com/Yusufzhafir/go-orderbook/backend/internal/usecase/user"
+	"github.com/jmoiron/sqlx"
+	"github.com/joho/godotenv"
+	_ "github.com/lib/pq"
+
+	tb "github.com/tigerbeetle/tigerbeetle-go"
+	tbTypes "github.com/tigerbeetle/tigerbeetle-go/pkg/types"
 )
 
 func main() {
-	newOb := engine.NewOrderBookEngine()
-	newOb.Initialize()
+	rootCtx, stop := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)
+	defer stop()
 
-	result, err := newOb.AddOrder(model.NewOrder(
-		1,
-		model.ASK,
-		10_000,
-		10,
-		model.ORDER_GOOD_TILL_CANCEL,
-	))
+	err := godotenv.Load()
+	if err != nil {
+		log.Fatal("Error loading .env file")
+	}
 
-	log.Printf("the trade result : %+v \n err: %v", result, err)
-	log.Println(newOb.GetOrderInfos())
+	dbUser := os.Getenv("DB_USER")
+	dbPass := os.Getenv("DB_PASSWORD")
+	dbHost := os.Getenv("DB_HOST")
+	dbPort := os.Getenv("DB_PORT")
+	dbName := os.Getenv("DB_NAME")
 
-	result, err = newOb.AddOrder(model.NewOrder(
-		1,
-		model.ASK,
-		10_000,
-		10,
-		model.ORDER_GOOD_TILL_CANCEL,
-	))
+	// construct DSN
+	pgInfo := fmt.Sprintf(
+		"user=%s password=%s host=%s port=%s dbname=%s sslmode=disable",
+		dbUser, dbPass, dbHost, dbPort, dbName,
+	)
+	db, err := sqlx.Connect("postgres", pgInfo)
+	if err != nil {
+		log.Fatalf("error connecting postgres: %v", err)
+	}
 
-	//should still be one
-	log.Printf("the trade result : %v \n err: %v", result, err)
-	log.Println(newOb.GetOrderInfos())
+	client, err := tb.NewClient(tbTypes.ToUint128(1), []string{"3001"})
 
-	cancelOrderId := model.OrderId(2)
-	result, err = newOb.AddOrder(model.NewOrder(
-		cancelOrderId,
-		model.BID,
-		00,
-		10,
-		model.ORDER_GOOD_TILL_CANCEL,
-	))
+	if err != nil {
+		log.Fatalf("error connecting tigerbeetle: %v", err)
+	}
 
-	//should have both bid and asks
-	log.Printf("the trade result : %+v \n err: %v", result, err)
-	log.Println(newOb.GetOrderInfos())
+	userLedgerRepo := userLedgerRepository.NewLedgerRepository(db)
 
-	result, err = newOb.AddOrder(model.NewOrder(
-		3,
-		model.BID,
-		10_000,
-		10,
-		model.ORDER_GOOD_TILL_CANCEL,
-	))
+	// result, err := userLedgerRepo.ListLedgers(rootCtx)
+	// if err != nil {
+	// 	log.Fatalf("error connecting tigerbeetle: %v", err)
+	// }
+	// log.Printf("LEDGER RESULT %v", result)
+	// ledgerId := int64(12)
+	// escrowAccountLedger := tbTypes.ID().BigInt()
 
-	//should have only bids
-	log.Printf("the trade result : %+v \n err: %v", result, err)
-	log.Println(newOb.GetOrderInfos())
+	// result, err := userLedgerRepo.CreateLedger(rootCtx, "BTC", ledgerId, escrowAccountLedger.String())
 
-	result, err = newOb.ModifyOrder(model.OrderModify{
-		ID:       cancelOrderId,
-		Side:     model.BID,
-		Price:    10_000,
-		Quantity: 10,
-	}, model.ORDER_GOOD_TILL_CANCEL)
-	log.Printf("the trade result : %+v \n err: %v", result, err)
-	log.Println(newOb.GetOrderInfos())
+	if err != nil {
+		log.Fatalf("error creating ledger: %v", err)
+	}
 
-	err = newOb.CancelOrder(cancelOrderId)
+	userRepo := userRepository.NewUserRepository(db)
+	userUseCaseOpts := user.UserUseCaseOpts{
+		UserRepo:   &userRepo,
+		LedgerRepo: &userLedgerRepo,
+		TbClient:   &client,
+		Db:         db,
+	}
 
-	//should have only bids
-	log.Printf("cancel the result err: %v", err)
-	log.Println(newOb.GetOrderInfos())
+	userUseCase := user.NewUserUseCase(userUseCaseOpts)
 
+	newUser, err := userUseCase.Register(rootCtx, "yusufshadiqqqq", "1231233")
+
+	if err != nil {
+		log.Fatalf("error creating user: %v", err)
+	}
+
+	// account, err := client.QueryAccounts(tbTypes.QueryFilter{
+	// 	Ledger: uint32(result.LedgerTbId),
+	// })
+	// if err != nil {
+	// 	log.Fatalf("error getting account: %v", err)
+	// }
+	// log.Printf("ACCOUNT RESULT %v", account)
+
+	ledgerTB, err := userUseCase.GetUserLedger(rootCtx, newUser, 13)
+	if err != nil {
+		log.Fatalf("error fetching ledger: %v", err)
+	}
+	convert, err := stringToUint128(ledgerTB.TBAccountID)
+	if err != nil {
+		log.Fatalf("error converting: %v", err)
+	}
+	account2, err := client.LookupAccounts([]tbTypes.Uint128{
+		convert, //->string
+	})
+	if err != nil {
+		log.Fatalf("error getting account2: %v", err)
+	}
+	log.Printf("ACCOUNT RESULT %v", account2)
+
+}
+
+func stringToUint128(s string) (tbTypes.Uint128, error) {
+	bi, ok := new(big.Int).SetString(s, 10) // parse decimal string
+	if !ok {
+		return tbTypes.Uint128{}, fmt.Errorf("invalid uint128 string: %s", s)
+	}
+	return tbTypes.BigIntToUint128(*bi), nil
 }

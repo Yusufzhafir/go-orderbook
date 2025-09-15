@@ -14,6 +14,7 @@ import (
 	"time"
 
 	"github.com/Yusufzhafir/go-orderbook/backend/internal/engine"
+	userLedgerRepository "github.com/Yusufzhafir/go-orderbook/backend/internal/repository/ledger"
 	userRepository "github.com/Yusufzhafir/go-orderbook/backend/internal/repository/user"
 	"github.com/Yusufzhafir/go-orderbook/backend/internal/router"
 	"github.com/Yusufzhafir/go-orderbook/backend/internal/router/middleware"
@@ -106,7 +107,12 @@ func main() {
 		logger.Fatalf("error connecting postgres: %v", err)
 	}
 	userRepo := userRepository.NewUserRepository(db)
-	userUsecase := user.NewUserUseCase(userRepo)
+	userLedgerRepo := userLedgerRepository.NewLedgerRepository(db)
+	userUseCaseOpts := user.UserUseCaseOpts{
+		UserRepo:   &userRepo,
+		LedgerRepo: &userLedgerRepo,
+	}
+	userUsecase := user.NewUserUseCase(userUseCaseOpts)
 	tokenMaker := middleware.NewJWTMaker(jwtSecret)
 	//bind router
 	bindRouterOpts := router.BindRouterOpts{
