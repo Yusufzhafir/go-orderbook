@@ -5,7 +5,9 @@ import (
 	"net/http"
 	"time"
 
+	"github.com/Yusufzhafir/go-orderbook/backend/internal/router/middleware"
 	"github.com/Yusufzhafir/go-orderbook/backend/internal/usecase/order"
+	"github.com/Yusufzhafir/go-orderbook/backend/internal/usecase/user"
 )
 
 type statusWriter struct {
@@ -81,40 +83,48 @@ func Cors(next http.Handler) http.Handler {
 }
 
 // GET /api/v1/orderbook?symbol=TICKER-USD&depth=50 →
-func bindTicker(serverRouter *http.ServeMux, orderUsecase *order.OrderUseCase) {
-	serverRouter.Handle("GET /api/v1/ticker", logging(http.HandlerFunc(defaultHandler)))
-	serverRouter.Handle("GET /api/v1/ticker/{ticker}", logging(http.HandlerFunc(defaultHandler)))
-	serverRouter.Handle("GET /api/v1/ticker/{ticker}/order-list", logging(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+func bindTicker(serverRouter *http.ServeMux, orderUsecase *order.OrderUseCase, tokenMaker *middleware.JWTMaker) {
+	authmiddleware := middleware.AuthMiddleware(tokenMaker)
+	serverRouter.Handle("GET /api/v1/ticker", authmiddleware(logging(http.HandlerFunc(defaultHandler))))
+	serverRouter.Handle("GET /api/v1/ticker/{ticker}", authmiddleware(logging(http.HandlerFunc(defaultHandler))))
+	serverRouter.Handle("GET /api/v1/ticker/{ticker}/order-queue/{price}", authmiddleware(logging(http.HandlerFunc(defaultHandler))))
+	serverRouter.Handle("GET /api/v1/ticker/{ticker}/order-list", authmiddleware(logging(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		uc := *orderUsecase
 		data := uc.GetOrderInfos(r.Context())
 		writeJSON(w, http.StatusOK, data)
-	})))
-	serverRouter.Handle("GET /api/v1/ticker/{ticker}/order-queue/{price}", logging(http.HandlerFunc(defaultHandler)))
+	}))))
 }
 
-func bindOrder(serverRouter *http.ServeMux, usecase *order.OrderUseCase) {
+func bindOrder(serverRouter *http.ServeMux, usecase *order.OrderUseCase, tokenMaker *middleware.JWTMaker) {
+	authmiddleware := middleware.AuthMiddleware(tokenMaker)
 	newOrderRouter := NewOrderRouter(usecase)
-	serverRouter.Handle("POST /api/v1/order/add", logging(http.HandlerFunc(newOrderRouter.Add)))
-	serverRouter.Handle("PUT /api/v1/order/modify", logging(http.HandlerFunc(newOrderRouter.Modify)))
-	serverRouter.Handle("DELETE /api/v1/order/cancel", logging(http.HandlerFunc(newOrderRouter.Cancel)))
+	serverRouter.Handle("POST /api/v1/order/add", logging(authmiddleware(http.HandlerFunc(newOrderRouter.Add))))
+	serverRouter.Handle("PUT /api/v1/order/modify", logging(authmiddleware(http.HandlerFunc(newOrderRouter.Modify))))
+	serverRouter.Handle("DELETE /api/v1/order/cancel", logging(authmiddleware(http.HandlerFunc(newOrderRouter.Cancel))))
 }
-func bindUser(serverRouter *http.ServeMux) {
-	serverRouter.Handle("GET /api/v1/user/{id}", logging(http.HandlerFunc(defaultHandler)))
-	serverRouter.Handle("GET /api/v1/user/{id}/order-list", logging(http.HandlerFunc(defaultHandler)))
-	serverRouter.Handle("GET /api/v1/user/{id}/transactions", logging(http.HandlerFunc(defaultHandler)))
-	serverRouter.Handle("GET /api/v1/user/{id}/portfolio", logging(http.HandlerFunc(defaultHandler)))
-	serverRouter.Handle("POST /api/v1/user/{id}/money", logging(http.HandlerFunc(defaultHandler)))
+func bindUser(serverRouter *http.ServeMux, tokenMaker *middleware.JWTMaker, userUseCase *user.UserUseCase) {
+	authmiddleware := middleware.AuthMiddleware(tokenMaker)
+	userRouter := NewUserRouter(userUseCase, tokenMaker)
+	serverRouter.Handle("GET /api/v1/user/", logging(authmiddleware(http.HandlerFunc(userRouter.GetUser))))
+	serverRouter.Handle("GET /api/v1/user/order-list", logging(authmiddleware(http.HandlerFunc(defaultHandler))))
+	serverRouter.Handle("GET /api/v1/user/transactions", logging(authmiddleware(http.HandlerFunc(defaultHandler))))
+	serverRouter.Handle("GET /api/v1/user/portfolio", logging(authmiddleware(http.HandlerFunc(defaultHandler))))
+	serverRouter.Handle("POST /api/v1/user/money", logging(authmiddleware(http.HandlerFunc(defaultHandler))))
+	serverRouter.Handle("POST /api/v1/user/register", logging(http.HandlerFunc(userRouter.RegisterUser)))
+	serverRouter.Handle("POST /api/v1/user/login", logging(http.HandlerFunc(userRouter.LoginUser)))
 }
 
 type BindRouterOpts struct {
 	ServerRouter *http.ServeMux
 	OrderUseCase *order.OrderUseCase
+	TokenMaker   *middleware.JWTMaker
+	UserUseCase  *user.UserUseCase
 }
 
 func BindRouter(opts BindRouterOpts) {
-	bindOrder(opts.ServerRouter, opts.OrderUseCase)
-	bindUser(opts.ServerRouter)
-	bindTicker(opts.ServerRouter, opts.OrderUseCase)
+	bindOrder(opts.ServerRouter, opts.OrderUseCase, opts.TokenMaker)
+	bindUser(opts.ServerRouter, opts.TokenMaker, opts.UserUseCase)
+	bindTicker(opts.ServerRouter, opts.OrderUseCase, opts.TokenMaker)
 
 	//healthcheck
 	opts.ServerRouter.Handle("GET /healthz", logging(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {

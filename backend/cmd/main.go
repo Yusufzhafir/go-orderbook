@@ -3,6 +3,7 @@ package main
 import (
 	"context"
 	"errors"
+	"fmt"
 	"log"
 	"math/big"
 	"net/http"
@@ -13,12 +14,18 @@ import (
 	"time"
 
 	"github.com/Yusufzhafir/go-orderbook/backend/internal/engine"
+	userRepository "github.com/Yusufzhafir/go-orderbook/backend/internal/repository/user"
 	"github.com/Yusufzhafir/go-orderbook/backend/internal/router"
+	"github.com/Yusufzhafir/go-orderbook/backend/internal/router/middleware"
 	"github.com/Yusufzhafir/go-orderbook/backend/internal/usecase/order"
+	"github.com/Yusufzhafir/go-orderbook/backend/internal/usecase/user"
 	"github.com/Yusufzhafir/go-orderbook/backend/internal/websocket"
 	"github.com/Yusufzhafir/go-orderbook/backend/pkg/model"
+	"github.com/jmoiron/sqlx"
 	"github.com/joho/godotenv"
 	"github.com/tigerbeetle/tigerbeetle-go/pkg/types"
+
+	_ "github.com/lib/pq"
 )
 
 func mapToWsTrade(order model.Trade) websocket.Trade {
@@ -82,10 +89,31 @@ func main() {
 		websocket.ServeWS(hub, w, r)
 	})
 
+	dbUser := os.Getenv("DB_USER")
+	dbPass := os.Getenv("DB_PASSWORD")
+	dbHost := os.Getenv("DB_HOST")
+	dbPort := os.Getenv("DB_PORT")
+	dbName := os.Getenv("DB_NAME")
+	jwtSecret := os.Getenv("JWT_SECRET")
+
+	// construct DSN
+	pgInfo := fmt.Sprintf(
+		"user=%s password=%s host=%s port=%s dbname=%s sslmode=disable",
+		dbUser, dbPass, dbHost, dbPort, dbName,
+	)
+	db, err := sqlx.Connect("postgres", pgInfo)
+	if err != nil {
+		logger.Fatalf("error connecting postgres: %v", err)
+	}
+	userRepo := userRepository.NewUserRepository(db)
+	userUsecase := user.NewUserUseCase(userRepo)
+	tokenMaker := middleware.NewJWTMaker(jwtSecret)
 	//bind router
 	bindRouterOpts := router.BindRouterOpts{
 		ServerRouter: serveMux,
 		OrderUseCase: &orderUseCase,
+		TokenMaker:   tokenMaker,
+		UserUseCase:  &userUsecase,
 	}
 	router.BindRouter(bindRouterOpts)
 	logger.Println("finished binding router")
