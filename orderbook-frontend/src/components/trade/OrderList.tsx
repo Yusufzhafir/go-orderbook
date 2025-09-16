@@ -44,18 +44,17 @@ export default function OrderList({ ticker }: { ticker?: string }) {
   }, [orders, ticker]);
 
   return (
-    <div className="border rounded-xl p-4">
+    <div className="border rounded-xl p-4 overflow-x-auto">
       <div className="flex items-center justify-between mb-3">
         <h3 className="font-semibold">My Orders{ticker ? ` — ${ticker}` : ""}</h3>
         {isLoading && <span className="text-xs text-gray-500">Loading…</span>}
       </div>
 
-      {error && (
+      {error != null ? (
         <div className="text-sm text-red-600 mb-2 h-96">
           {String(error)}
         </div>
-      )}
-      {filtered.length === 0 ? (
+      ) : filtered.length === 0 ? (
         <div className="h-96">
           <p className="text-sm text-gray-500">No orders found.</p>
         </div>
@@ -120,7 +119,8 @@ export default function OrderList({ ticker }: { ticker?: string }) {
             <p className="text-xs text-red-600 mt-2">{String(cancel.error)}</p>
           )}
         </div>
-      )}
+      )
+      }
     </div>
   );
 }

@@ -12,7 +12,7 @@ import { useSearchParams } from "next/navigation";
 
 export default function Page() {
   const search = useSearchParams();
-  const symbol = search.get("symbol") ?? "BBCAUSD";
+  const symbol = search.get("symbol") || "BBCAUSD";
   const [mode] = React.useState<"subscribeMessage" | "queryParam">("subscribeMessage");
   const { trades } = useTrades(symbol, mode); // optional
   const { data: book, error } = useOrderBook(symbol, 500);

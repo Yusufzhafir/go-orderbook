@@ -2,6 +2,8 @@ import type { Metadata } from "next";
 import { Geist, Geist_Mono } from "next/font/google";
 import "./globals.css";
 import Providers from "./provider";
+import { Suspense } from "react";
+import LoadingFallback from "@/components/layout/LoadingFallback";
 
 const geistSans = Geist({
   variable: "--font-geist-sans",
@@ -29,7 +31,9 @@ export default function RootLayout({
         className={`${geistSans.variable} ${geistMono.variable} antialiased min-h-dvh bg-background text-foreground`}
       >
         <Providers>
+          <Suspense fallback={<LoadingFallback/>}>
           {children}
+          </Suspense>
         </Providers>
       </body>
     </html>
