@@ -67,6 +67,7 @@ export default function OrderList({ ticker }: { ticker?: string }) {
                   <th className="py-2 pr-2">ID</th>
                   <th className="py-2 pr-2">Side</th>
                   <th className="py-2 pr-2">Type</th>
+                  <th className="py-2 pr-2">Ticker</th>
                   <th className="py-2 pr-2">Price</th>
                   <th className="py-2 pr-2">Qty</th>
                   <th className="py-2 pr-2">Status</th>
@@ -88,6 +89,7 @@ export default function OrderList({ ticker }: { ticker?: string }) {
                       </span>
                     </td>
                     <td className="py-2 pr-2">{typeLabel(o.Type)}</td>
+                    <td className="py-2 pr-2">{o.Ticker}</td>
                     <td className="py-2 pr-2">{o.Price}</td>
                     <td className="py-2 pr-2">{o.Quantity}</td>
                     <td className="py-2 pr-2">
