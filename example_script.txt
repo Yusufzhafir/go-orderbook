@@ -1,0 +1,30 @@
+{
+  "id": "2125291081740135062548304134048987076",
+  "debits_pending": "0",
+  "debits_posted": "0",
+  "credits_pending": "0",
+  "credits_posted": "0",
+  "user_data_128": "0",
+  "user_data_64": "0",
+  "user_data_32": "0",
+  "ledger": "20",
+  "code": "1001",
+  "flags": ["linked","credits_must_not_exceed_debits","history"],
+  "timestamp": "1757999579494838179"
+}
+{
+  "id": "2125291221696196643946016034634836520",
+  "debits_pending": "0",
+  "debits_posted": "0",
+  "credits_pending": "0",
+  "credits_posted": "0",
+  "user_data_128": "0",
+  "user_data_64": "0",
+  "user_data_32": "0",
+  "ledger": "20",
+  "code": "1",
+  "flags": ["linked","debits_must_not_exceed_credits","history"],
+  "timestamp": "1757999694630875968"
+}
+
+create_transfers id=1 debit_account_id=2125291081740135062548304134048987076 credit_account_id=2125291221696196643946016034634836520 ledger=20 code=1010 amount=100000
