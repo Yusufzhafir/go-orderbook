@@ -5,12 +5,13 @@ import { Button } from "../ui/button";
 import { Github } from "lucide-react";
 import LoginDialog from "./LoginDialog";
 import RegisterDialog from "./registerDialog";
+import AddMoneyDialog from "./AddMoneyDialog";
 
 const Navbar = () => {
     const { data } = useMe()
     return (
-        <div className="flex w-full bg-zinc-200 p-4 rounded-b-2xl shadow">
-            <div className="flex w-full items-center gap-4">
+        <div className="flex w-full bg-zinc-200 p-4 rounded-b-2xl shadow place-content-between">
+            <div className="flex items-center gap-4">
                 <h1 className="font-bold">
                     This is an Orderbook app written by
                     <span className="text-blue-500 cursor-pointer">
@@ -29,7 +30,7 @@ const Navbar = () => {
                 </a>
 
             </div>
-            <div className="flex gap-4">
+            <div className="flex gap-4 items-center">
                 <div className="font-bold capitalize text-md">
                     name : <span className="font-medium text-sm">{data?.username}</span>
                 </div>
@@ -39,6 +40,7 @@ const Navbar = () => {
                         maximumFractionDigits: 2
                     })} USD</span>
                 </div>
+                <AddMoneyDialog />
                 <LoginDialog />
                 <RegisterDialog />
             </div>

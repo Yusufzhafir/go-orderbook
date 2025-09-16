@@ -2,7 +2,7 @@
 
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { setAccessToken, clearAccessToken } from "@/lib/token";
-import { api, LoginRequest, RegisterRequest } from "@/api/client";
+import { AddUserMoneyRequest, api, LoginRequest, RegisterRequest } from "@/api/client";
 
 export function useLogin() {
   const qc = useQueryClient();
@@ -13,6 +13,16 @@ export function useLogin() {
       qc.invalidateQueries({ queryKey: ["me"] });
     },
   });
+}
+
+export function useAddMoney(){
+  const qc = useQueryClient()
+  return useMutation({
+    mutationFn : (b:AddUserMoneyRequest) => api.user.addMoney(b),
+    onSuccess : ()=>{
+      qc.invalidateQueries({ queryKey: ["me"] });
+    }
+  })
 }
 
 export function useRegister() {

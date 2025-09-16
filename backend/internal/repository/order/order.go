@@ -15,14 +15,14 @@ type OrderRecord struct {
 	ID             uint64  `db:"id"`
 	UserID         int64   `db:"user_id"`
 	TickerID       int64   `db:"ticker_id"`
-	Side           int8    `db:"side"` // 0 = BID, 1 = ASK
+	Side           int8    `db:"side"`
 	TickerLedgerID int64   `db:"ticker_ledger_id"`
-	Type           uint8   `db:"type"` // 0 = IOC (Fill-And-Kill), 1 = GTC
+	Type           uint8   `db:"type"`
 	Quantity       uint64  `db:"quantity"`
 	Filled         uint64  `db:"filled"`
 	Price          uint64  `db:"price"`
 	IsActive       bool    `db:"is_active"`
-	CreatedAt      string  `db:"created_at"` // use time.Time in real code
+	CreatedAt      string  `db:"created_at"`
 	ClosedAt       *string `db:"closed_at"`
 }
 
@@ -52,7 +52,7 @@ type OrderRepository interface {
 	CloseOrders(ctx context.Context, tx *sqlx.Tx, orderID []uint64, closedAt time.Time) error
 	UpdateFilled(ctx context.Context, tx *sqlx.Tx, orderID uint64, filled uint64) error
 	GetOrderByID(ctx context.Context, tx *sqlx.Tx, orderID uint64) (*OrderRecord, error)
-	ListOrdersByUser(ctx context.Context, tx *sqlx.Tx, userID int64, onlyActive bool) ([]OrderRecord, error)
+	ListOrdersByUser(ctx context.Context, tx *sqlx.Tx, userID int64, onlyActive bool) ([]OrderRecordWithTicker, error)
 	CreateTrade(ctx context.Context, tx *sqlx.Tx, trade TradeRecord) error
 	CreateTrades(ctx context.Context, tx *sqlx.Tx, trade []TradeRecord) error
 }
@@ -130,17 +130,33 @@ func (r *orderRepositoryImpl) GetOrderByID(ctx context.Context, tx *sqlx.Tx, ord
 	return &ord, nil
 }
 
-func (r *orderRepositoryImpl) ListOrdersByUser(ctx context.Context, tx *sqlx.Tx, userID int64, onlyActive bool) ([]OrderRecord, error) {
-	var orders []OrderRecord
+type OrderRecordWithTicker struct {
+	ID             uint64  `db:"id"`
+	UserID         int64   `db:"user_id"`
+	Ticker         string  `db:"ticker"`
+	TickerID       int64   `db:"ticker_id"`
+	Side           int8    `db:"side"`
+	TickerLedgerID int64   `db:"ticker_ledger_id"`
+	Type           uint8   `db:"type"`
+	Quantity       uint64  `db:"quantity"`
+	Filled         uint64  `db:"filled"`
+	Price          uint64  `db:"price"`
+	IsActive       bool    `db:"is_active"`
+	CreatedAt      string  `db:"created_at"`
+	ClosedAt       *string `db:"closed_at"`
+}
+
+func (r *orderRepositoryImpl) ListOrdersByUser(ctx context.Context, tx *sqlx.Tx, userID int64, onlyActive bool) ([]OrderRecordWithTicker, error) {
+	var orders []OrderRecordWithTicker
 	var err error
 	if onlyActive {
 		err = tx.SelectContext(ctx, &orders,
-			`SELECT id, user_id, ticker_id, side, ticker_ledger_id, type, quantity,filled, price, is_active, created_at, closed_at
-             FROM orders WHERE user_id=$1 AND is_active=true ORDER BY created_at DESC`, userID)
+			`SELECT o.id, user_id, ticker_id,side, t.ticker as ticker,ticker_ledger_id, type, quantity,filled, price, is_active, o.created_at, closed_at
+             FROM orders o LEFT JOIN ticker t ON o.ticker_id=t.id WHERE user_id=$1 AND is_active=true ORDER BY created_at DESC`, userID)
 	} else {
 		err = tx.SelectContext(ctx, &orders,
-			`SELECT id, user_id, ticker_id, side, ticker_ledger_id, type, quantity,filled, price, is_active, created_at, closed_at
-             FROM orders WHERE user_id=$1 ORDER BY created_at DESC`, userID)
+			`SELECT id, user_id, ticker_id, side, t.ticker as ticker, ticker_ledger_id, type, quantity,filled, price, is_active, created_at, closed_at
+             FROM orders o LEFT JOIN ticker t ON o.ticker_id=t.id  WHERE user_id=$1 ORDER BY created_at DESC`, userID)
 	}
 	return orders, err
 }

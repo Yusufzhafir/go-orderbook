@@ -32,7 +32,7 @@ type OrderUseCase interface {
 	GetOrderInfos(ctx context.Context, ticker string) *model.MarketDepth
 
 	RegisterTradeHandler(handler TradeHandler)
-	GetOrderByUserId(ctx context.Context, userId int64, isOnlyActive bool) (*[]orderRepository.OrderRecord, error)
+	GetOrderByUserId(ctx context.Context, userId int64, isOnlyActive bool) (*[]orderRepository.OrderRecordWithTicker, error)
 	GetTickerList(ctx context.Context) ([]*ledgerRepository.Ticker, error)
 }
 type tickerType string
@@ -372,7 +372,7 @@ func (ou *orderUseCaseImpl) GetTickerList(ctx context.Context) ([]*ledgerReposit
 	return filteredLedger, nil
 }
 
-func (ou *orderUseCaseImpl) GetOrderByUserId(ctx context.Context, userId int64, isOnlyActive bool) (*[]orderRepository.OrderRecord, error) {
+func (ou *orderUseCaseImpl) GetOrderByUserId(ctx context.Context, userId int64, isOnlyActive bool) (*[]orderRepository.OrderRecordWithTicker, error) {
 	tx := ou.db.MustBeginTx(ctx, nil)
 	orderRecord, err := (*ou.orderRepo).ListOrdersByUser(ctx, tx, userId, isOnlyActive)
 	return &orderRecord, err
