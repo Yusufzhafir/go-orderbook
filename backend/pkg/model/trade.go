@@ -9,4 +9,5 @@ type Trade struct {
 	Price     Price
 	Quantity  Quantity
 	Timestamp time.Time
+	Ticker    string
 }

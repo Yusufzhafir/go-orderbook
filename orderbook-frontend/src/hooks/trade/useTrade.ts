@@ -51,11 +51,12 @@ export function useTrades(symbol: string, mode: Mode = "subscribeMessage") {
 
     ws.onmessage = (ev) => {
       try {
-        const payload = JSON.parse(ev.data) as TradeMsgBody;
+        const payload = ev.data as string
+        const parsePayload = payload.split("\n").map((e)=>(JSON.parse(e) as TradeMsgBody).trade)
 
         qc.setQueryData<TradeMsg[]>(["trades", symbol], (prev) => {
           const curr = prev || []
-          const next = [payload.trade, ...curr].slice(0, 300);
+          const next = [...parsePayload, ...curr].slice(0, 300);
           return next;
         });
       } catch {

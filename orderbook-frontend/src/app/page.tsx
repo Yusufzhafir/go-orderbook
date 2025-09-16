@@ -5,31 +5,30 @@ import { useOrderBook } from "@/hooks/trade/useOrderbook";
 import OrderBook from "@/components/trade/OrderBook";
 import TradeTicker from "@/components/trade/TradeTicker";
 import { AddOrderForm } from "@/components/trade/OrderForm";
-import { useLogin, useMe } from "@/hooks/auth/useAuth";
 import Navbar from "@/components/layout/Navbar";
+import OrderList from "@/components/trade/OrderList";
 
 export default function Page() {
-  const [symbol] = React.useState("ticker");
+  const [symbol] = React.useState("BBCAUSD");
   const [mode] = React.useState<"subscribeMessage" | "queryParam">("subscribeMessage");
   const { trades } = useTrades(symbol, mode); // optional
   const { data: book, error } = useOrderBook(symbol, 500);
-  const login = useLogin();
-  const me = useMe();
 
 
   return (
-    <div>
+    <div className="max-h-lvh overflow-y-hidden overflow-x-hidden ">
       <Navbar/>
       <div className="p-4 grid lg:grid-cols-3 gap-4">
         <div className="flex flex-col gap-4 lg:col-span-2">
-          <div className="grid lg:grid-cols-2 gap-4">
+          <div className="grid lg:grid-cols-2 gap-4 h-min">
             <div className="lg:col-span-1">
               <AddOrderForm ticker={symbol} />
             </div>
             <div className="lg:col-span-1">
+              <OrderList ticker={""}/>
             </div>
           </div>
-          <div className="h-[60vh]">
+          <div className="h-[40vh]">
             <OrderBook bids={book?.bids ?? []} asks={book?.asks ?? []} depth={20} error={error} />
           </div>
         </div>

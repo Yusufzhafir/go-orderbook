@@ -113,9 +113,10 @@ export interface UserOrder {
   ID: number
   UserID: number
   TickerID: number
-  Side: number
+  Ticker : string,
+  Side: Side
   TickerLedgerID: number
-  Type: number
+  Type: OrderType
   Quantity: number
   Filled: number
   Price: number
@@ -191,7 +192,7 @@ export const api = {
     getMe: () =>
       http<UserProfile>("/api/v1/user/", { method: "GET" }),
     getMyOrders: () =>
-      http<{ orders: UserOrderList }>("/api/v1/user/order-list", {
+      http<UserOrderList>("/api/v1/user/order-list", {
         method: "GET",
       }),
     addMoney: (b: AddUserMoneyRequest) =>

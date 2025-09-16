@@ -21,17 +21,17 @@ export function AddOrderForm({ className,ticker }: { className?: string,ticker:s
     }
     return total
   },[price,qty])
-  const m = useMutation({ mutationFn: api.order.addOrder, onSuccess: (r) => alert(`${r.status}: ${r.orderId} ${r.message ?? ""}`), onError: (e) => alert(e.message) });
+  const {mutate,isPending} = useMutation({ mutationFn: api.order.addOrder, onSuccess: (r) => alert(`${r.status}: ${r.orderId} ${r.message ?? ""}`), onError: (e) => alert(e.message) });
 
   const submit = React.useCallback(() => {
-    m.mutate({
+    mutate({
       side: side == "BID" ? Side.BID : Side.ASK,
       type: MapOrderType(type),
       price: Number(price),
       quantity: Number(qty),
       ticker : ticker
     });
-  },[ticker,type,price,qty])
+  },[ticker,type,price,qty,side,mutate])
 
   return (
     <Card className={cn("p-4 space-y-3",className)}>
@@ -54,9 +54,6 @@ export function AddOrderForm({ className,ticker }: { className?: string,ticker:s
             <SelectContent>
               <SelectItem value="LIMIT">LIMIT</SelectItem>
               <SelectItem value="MARKET">MARKET</SelectItem>
-              <SelectItem value="IOC">IOC / FAK</SelectItem>
-              <SelectItem value="FOK">FOK</SelectItem>
-              <SelectItem value="GTC">GTC</SelectItem>
             </SelectContent>
           </Select>
         </div>
@@ -70,76 +67,9 @@ export function AddOrderForm({ className,ticker }: { className?: string,ticker:s
           <Input type="number" inputMode="numeric" value={qty} onChange={(e) => setQty(e.target.value)} />
         </div>
       </div>
-      <Button className="w-full" onClick={submit} disabled={m.isPending}>
-        {m.isPending ? "Placing…" : "Place Order"}
+      <Button className="w-full" onClick={submit} disabled={isPending}>
+        {isPending ? "Placing…" : "Place Order"}
       </Button>
     </Card>
   );
 }
-
-// export function ModifyCancelForm() {
-//   const [id, setId] = React.useState<string>("");
-//   const [price, setPrice] = React.useState<string>("");
-//   const [qty, setQty] = React.useState<string>("");
-//   const [type, setType] = React.useState<OrderTypeString | "">("");
-
-//   const mModify = useMutation({
-//     mutationFn: api.order.modifyOrder,
-//     onSuccess: (r) => alert(`${r.status}: ${r.orderId} ${r.message ?? ""}`),
-//     onError: (e) => alert(e.message),
-//   });
-//   const mCancel = useMutation({
-//     mutationFn: api.order.cancelOrder,
-//     onSuccess: (r) => alert(`${r.status}: ${r.orderId} ${r.message ?? ""}`),
-//     onError: (e) => alert(e.message),
-//   });
-
-//   const doModify = () => {
-//     if (!id) return alert("Order ID required");
-//     const body: ModifyOrderRequest = {
-//       id: Number(id),
-//     };
-//     if (price !== "") body.price = Number(price);
-//     if (qty !== "") body.quantity = Number(qty);
-//     if (type !== "") body.type = MapOrderType(type);
-//     mModify.mutate(body);
-//   };
-//   const doCancel = () => {
-//     if (!id) return alert("Order ID required");
-//     mCancel.mutate({ id: Number(id) });
-//   };
-
-//   return (
-//     <Card className="p-4 space-y-3">
-//       <div className="font-semibold">Modify / Cancel</div>
-//       <div className="grid grid-cols-3 gap-3">
-//         <div>
-//           <Label>Order ID</Label>
-//           <Input type="number" value={id} onChange={(e) => setId(e.target.value)} />
-//         </div>
-//         <div>
-//           <Label>New Price (opt)</Label>
-//           <Input type="number" value={price} onChange={(e) => setPrice(e.target.value)} />
-//         </div>
-//         <div>
-//           <Label>New Qty (opt)</Label>
-//           <Input type="number" value={qty} onChange={(e) => setQty(e.target.value)} />
-//         </div>
-//         <div>
-//           <Label>New Type (opt)</Label>
-//           <Select value={type || ""} onValueChange={(v) => setType(v as OrderTypeString)}>
-//             <SelectTrigger><SelectValue placeholder="—" /></SelectTrigger>
-//             <SelectContent>
-//               <SelectItem value="LIMIT">LIMIT</SelectItem>
-//               <SelectItem value="MARKET">MARKET</SelectItem>
-//             </SelectContent>
-//           </Select>
-//         </div>
-//       </div>
-//       <div className="flex gap-2">
-//         <Button onClick={doModify} disabled={mModify.isPending}>Modify</Button>
-//         <Button variant="destructive" onClick={doCancel} disabled={mCancel.isPending}>Cancel</Button>
-//       </div>
-//     </Card>
-//   );
-// }

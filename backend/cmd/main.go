@@ -36,7 +36,7 @@ func mapToWsTrade(order model.Trade) websocket.Trade {
 		side = "SELL"
 	}
 	return websocket.Trade{
-		Symbol: "ticker",
+		Symbol: order.Ticker,
 		Price:  order.Price,
 		Qty:    order.Quantity,
 		Side:   side,

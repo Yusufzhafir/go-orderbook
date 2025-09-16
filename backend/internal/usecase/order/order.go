@@ -50,7 +50,6 @@ type orderUseCaseImpl struct {
 	db           *sqlx.DB
 }
 
-// NewOrderUseCase constructs with an already-initialized TB client.
 type TradeHandler func(model.Trade)
 
 type OrderUseCaseOpts struct {
@@ -84,7 +83,7 @@ func (ou *orderUseCaseImpl) getOrderbook(ticker tickerType) *engine.OrderBookEng
 	if ok {
 		return orderbook
 	}
-	createOrderbook := engine.NewOrderBookEngine()
+	createOrderbook := engine.NewOrderBookEngine(string(ticker))
 	createOrderbook.Initialize()
 	ou.orderBookEngineMap[ticker] = &createOrderbook
 

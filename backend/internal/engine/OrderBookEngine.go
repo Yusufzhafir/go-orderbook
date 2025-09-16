@@ -23,6 +23,7 @@ type OrderBookEngine interface {
 type orderBookEngineImpl struct {
 	bids, asks *btree.BTree                   // price-level trees
 	orders     map[model.OrderId]*model.Order // lookup by ID
+	ticker     string
 }
 
 // Pop from front of slice (queue behavior - FIFO)
@@ -106,6 +107,7 @@ func (o *orderBookEngineImpl) matchOrder() []*model.Trade {
 				Price:     bestPrice,
 				Quantity:  bestQuantity,
 				Side:      model.BID,
+				Ticker:    o.ticker,
 				Timestamp: time.Now(),
 			}
 			if askOrder.GetType() == model.ORDER_FILL_AND_KILL {
@@ -345,9 +347,11 @@ func (o *orderBookEngineImpl) Initialize() {
 	o.bids = btree.New(32) // degree tuned for performance
 	o.asks = btree.New(32)
 	o.orders = make(map[model.OrderId]*model.Order)
-	log.Println("order book is initialized!!")
+	log.Printf("order book is initialized!! %v", o)
 }
 
-func NewOrderBookEngine() OrderBookEngine {
-	return &orderBookEngineImpl{}
+func NewOrderBookEngine(ticker string) OrderBookEngine {
+	return &orderBookEngineImpl{
+		ticker: ticker,
+	}
 }
