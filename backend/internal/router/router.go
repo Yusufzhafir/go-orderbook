@@ -85,7 +85,33 @@ func Cors(next http.Handler) http.Handler {
 
 func bindTicker(serverRouter *http.ServeMux, orderUsecase *order.OrderUseCase, tokenMaker *middleware.JWTMaker) {
 	authmiddleware := middleware.AuthMiddleware(tokenMaker)
-	serverRouter.Handle("GET /api/v1/ticker", authmiddleware(logging(http.HandlerFunc(defaultHandler))))
+	serverRouter.Handle("GET /api/v1/ticker", authmiddleware(logging(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		type TickerResponse struct {
+			ID     int64  `json:"id"`
+			Ticker string `json:"ticker"`
+		}
+		type TickerListResponse struct {
+			Tickers []TickerResponse `json:"tickers"`
+		}
+
+		uc := *orderUsecase
+		tickerList, err := uc.GetTickerList(r.Context())
+		if err != nil {
+			writeJSONError(w, http.StatusBadRequest, fmt.Errorf("error fetching ticker : %v", err))
+			return
+		}
+		tickerResponse := make([]TickerResponse, 0, len(tickerList))
+		for _, ticker := range tickerList {
+			tickerResponse = append(tickerResponse, TickerResponse{
+				ID:     ticker.ID,
+				Ticker: ticker.Ticker,
+			})
+		}
+
+		writeJSON(w, http.StatusOK, TickerListResponse{
+			Tickers: tickerResponse,
+		})
+	}))))
 	serverRouter.Handle("GET /api/v1/ticker/{ticker}", authmiddleware(logging(http.HandlerFunc(defaultHandler))))
 	serverRouter.Handle("GET /api/v1/ticker/{ticker}/order-queue/{price}", authmiddleware(logging(http.HandlerFunc(defaultHandler))))
 	serverRouter.Handle("GET /api/v1/ticker/{ticker}/order-list", authmiddleware(logging(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {

@@ -109,6 +109,16 @@ export interface AddUserMoneyResponse {
   message?: string;
 }
 
+export interface TickerListResponse {
+  tickers: Ticker[]
+}
+
+interface Ticker {
+  id: number
+  ticker: string
+}
+
+
 export interface UserOrder {
   ID: number
   UserID: number
@@ -166,6 +176,11 @@ export const api = {
       http<OrderBookResponse>(`/api/v1/ticker/${ticker}/order-list`, {
         method: "GET",
       }),
+  },
+  ticker : {
+    tickerList : () =>http<TickerListResponse>("/api/v1/ticker",{
+      method : "GET"
+    })
   },
   user: {
     /** Public routes (no JWT) */

@@ -25,11 +25,12 @@ function statusLabel(active?: boolean, closed_at?: string | null) {
   return "OPEN";
 }
 
+const emptyArray: never[] = []
 export default function OrderList({ ticker }: { ticker?: string }) {
   const { data, isLoading, error } = useMyOrders();
   const cancel = useCancelOrder();
 
-  const orders: UserOrder[] = data || [];
+  const orders: UserOrder[] = data || emptyArray;
 
   const filtered = useMemo(() => {
     console.log(orders)
@@ -50,12 +51,14 @@ export default function OrderList({ ticker }: { ticker?: string }) {
       </div>
 
       {error && (
-        <div className="text-sm text-red-600 mb-2">
+        <div className="text-sm text-red-600 mb-2 h-96">
           {String(error)}
         </div>
       )}
       {filtered.length === 0 ? (
-        <p className="text-sm text-gray-500">No orders found.</p>
+        <div className="h-96">
+          <p className="text-sm text-gray-500">No orders found.</p>
+        </div>
       ) : (
         <div className="overflow-x-auto">
           <ScrollArea className="h-96">

@@ -1,19 +1,20 @@
 "use client";
 import * as React from "react";
-import { useMutation } from "@tanstack/react-query";
-import { api, MapOrderType, OrderTypeString, Side } from "@/api/client";
+import { MapOrderType, OrderTypeString, Side } from "@/api/client";
 import { Card } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Select, SelectTrigger, SelectContent, SelectItem, SelectValue } from "@/components/ui/select";
 import { cn } from "@/lib/utils";
+import { useAddOrder } from "@/hooks/trade/useOrderbook";
 
 export function AddOrderForm({ className,ticker }: { className?: string,ticker:string }) {
   const [side, setSide] = React.useState<"BID" | "ASK">("BID");
   const [type, setType] = React.useState<OrderTypeString>("LIMIT");
   const [price, setPrice] = React.useState<string>("0");
   const [qty, setQty] = React.useState<string>("1");
+  const {mutate,isPending} = useAddOrder()
   const orderCost = React.useMemo(()=>{
     const total = Number.parseInt(price)*Number.parseInt(qty)
     if (Number.isNaN(total)) {
@@ -21,7 +22,6 @@ export function AddOrderForm({ className,ticker }: { className?: string,ticker:s
     }
     return total
   },[price,qty])
-  const {mutate,isPending} = useMutation({ mutationFn: api.order.addOrder, onSuccess: (r) => alert(`${r.status}: ${r.orderId} ${r.message ?? ""}`), onError: (e) => alert(e.message) });
 
   const submit = React.useCallback(() => {
     mutate({

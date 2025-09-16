@@ -5,17 +5,14 @@ import { Separator } from "@/components/ui/separator";
 import { TradeMsg } from "@/hooks/trade/useTrade";
 
 type Row = { time: string; price: number; qty: number, symbol: string, side: string };
-//   symbol: string;
-//   price: number;
-//   quantity: number;
-//   timestamp?: number;
+
 export default function TradeTicker({ data }: { data: TradeMsg[] }) {
     const rows: Row[] = React.useMemo(() => {
         return data.map((t) => ({
             price: t.price,
             qty: t.qty,
             symbol: t.symbol,
-            side : t.side,
+            side: t.side,
             time: t.ts ? new Date(t.ts).toLocaleTimeString() : "--:--:--",
         }))
     }, [data])
@@ -25,15 +22,16 @@ export default function TradeTicker({ data }: { data: TradeMsg[] }) {
         <Card className="p-3 h-full overflow-auto">
             <div className="font-semibold mb-2">Running Trade</div>
             <Separator className="mb-2" />
-            <div className="grid grid-cols-4 text-xs font-medium mb-2 opacity-70">
-                <div>Time</div><div className="text-right">Price</div><div className="text-right">Qty</div><div className="text-right">Side</div>
+            <div className="grid grid-cols-5 text-xs font-medium mb-2 opacity-70">
+                <div>Time</div><div className="text-right">Price</div><div className="text-right">Qty</div><div className="text-right">Symbol</div><div className="text-right">Side</div>
             </div>
             <div className="space-y-1">
                 {rows.map((r, i) => (
-                    <div key={i} className="grid grid-cols-4 text-sm">
+                    <div key={i} className="grid grid-cols-5 text-sm">
                         <div className="tabular-nums">{r.time}</div>
                         <div className="text-right tabular-nums">{r.price}</div>
                         <div className="text-right tabular-nums">{r.qty}</div>
+                        <div className="text-right tabular-nums">{r.symbol}</div>
                         <div className="text-right tabular-nums">{r.side}</div>
                     </div>
                 ))}

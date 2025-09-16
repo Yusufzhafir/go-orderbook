@@ -33,6 +33,7 @@ type OrderUseCase interface {
 
 	RegisterTradeHandler(handler TradeHandler)
 	GetOrderByUserId(ctx context.Context, userId int64, isOnlyActive bool) (*[]orderRepository.OrderRecord, error)
+	GetTickerList(ctx context.Context) ([]*ledgerRepository.Ticker, error)
 }
 type tickerType string
 type orderUseCaseImpl struct {
@@ -353,6 +354,22 @@ func (ou *orderUseCaseImpl) GetOrderInfos(ctx context.Context, ticker string) *m
 
 	return (*ou.getOrderbook(tickerType(ticker))).GetOrderInfos()
 
+}
+
+func (ou *orderUseCaseImpl) GetTickerList(ctx context.Context) ([]*ledgerRepository.Ticker, error) {
+	tx := ou.db.MustBeginTx(ctx, nil)
+	tickerList, err := (*ou.ledgerRepo).ListLedgers(ctx, tx)
+	if err != nil {
+		return nil, err
+	}
+	filteredLedger := make([]*ledgerRepository.Ticker, 0, len(tickerList)-1)
+	for _, ticker := range tickerList {
+		if ticker.Ticker == model.CASH_TICKER {
+			continue
+		}
+		filteredLedger = append(filteredLedger, &ticker)
+	}
+	return filteredLedger, nil
 }
 
 func (ou *orderUseCaseImpl) GetOrderByUserId(ctx context.Context, userId int64, isOnlyActive bool) (*[]orderRepository.OrderRecord, error) {
