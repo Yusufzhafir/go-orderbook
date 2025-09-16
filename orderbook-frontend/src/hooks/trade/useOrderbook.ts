@@ -27,6 +27,7 @@ export function useAddOrder() {
     onSuccess: () => {
       qc.invalidateQueries({ queryKey: ["orderbook"] });
       qc.invalidateQueries({ queryKey: ["my-orders"] });
+      qc.invalidateQueries({ queryKey: ["me"] });
     },
   });
 }
@@ -38,6 +39,7 @@ export function useModifyOrder() {
     onSuccess: () => {
       qc.invalidateQueries({ queryKey: ["orderbook"] });
       qc.invalidateQueries({ queryKey: ["my-orders"] });
+      qc.invalidateQueries({ queryKey: ["me"] });
     },
   });
 }
@@ -49,6 +51,7 @@ export function useCancelOrder() {
     onSuccess: () => {
       qc.invalidateQueries({ queryKey: ["orderbook"] });
       qc.invalidateQueries({ queryKey: ["my-orders"] });
+      qc.invalidateQueries({ queryKey: ["me"] });
     },
   });
 }

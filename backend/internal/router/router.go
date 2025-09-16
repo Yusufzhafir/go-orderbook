@@ -136,7 +136,7 @@ func bindOrder(serverRouter *http.ServeMux, usecase *order.OrderUseCase, tokenMa
 func bindUser(serverRouter *http.ServeMux, tokenMaker *middleware.JWTMaker, userUseCase *user.UserUseCase, orderUsecase *order.OrderUseCase) {
 	authmiddleware := middleware.AuthMiddleware(tokenMaker)
 	userRouter := NewUserRouter(userUseCase, tokenMaker, orderUsecase)
-	serverRouter.Handle("GET /api/v1/user/", logging(authmiddleware(http.HandlerFunc(userRouter.GetUser))))
+	serverRouter.Handle("GET /api/v1/user", logging(authmiddleware(http.HandlerFunc(userRouter.GetUser))))
 	serverRouter.Handle("GET /api/v1/user/order-list", logging(authmiddleware(http.HandlerFunc(userRouter.GetUserOrderList))))
 	serverRouter.Handle("GET /api/v1/user/transactions", logging(authmiddleware(http.HandlerFunc(defaultHandler))))
 	serverRouter.Handle("GET /api/v1/user/portfolio", logging(authmiddleware(http.HandlerFunc(defaultHandler))))

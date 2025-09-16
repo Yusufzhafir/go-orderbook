@@ -205,7 +205,7 @@ export const api = {
 
     /** Protected routes (JWT required) */
     getMe: () =>
-      http<UserProfile>("/api/v1/user/", { method: "GET" }),
+      http<UserProfile>("/api/v1/user", { method: "GET" }),
     getMyOrders: () =>
       http<UserOrderList>("/api/v1/user/order-list", {
         method: "GET",
