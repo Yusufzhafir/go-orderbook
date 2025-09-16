@@ -1,6 +1,7 @@
 package router
 
 import (
+	"fmt"
 	"log"
 	"net/http"
 	"time"
@@ -82,7 +83,6 @@ func Cors(next http.Handler) http.Handler {
 	})
 }
 
-// GET /api/v1/orderbook?symbol=TICKER-USD&depth=50 →
 func bindTicker(serverRouter *http.ServeMux, orderUsecase *order.OrderUseCase, tokenMaker *middleware.JWTMaker) {
 	authmiddleware := middleware.AuthMiddleware(tokenMaker)
 	serverRouter.Handle("GET /api/v1/ticker", authmiddleware(logging(http.HandlerFunc(defaultHandler))))
@@ -90,7 +90,12 @@ func bindTicker(serverRouter *http.ServeMux, orderUsecase *order.OrderUseCase, t
 	serverRouter.Handle("GET /api/v1/ticker/{ticker}/order-queue/{price}", authmiddleware(logging(http.HandlerFunc(defaultHandler))))
 	serverRouter.Handle("GET /api/v1/ticker/{ticker}/order-list", authmiddleware(logging(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		uc := *orderUsecase
-		data := uc.GetOrderInfos(r.Context())
+		ticker := r.PathValue("ticker")
+		if ticker == "" {
+			writeJSONError(w, http.StatusBadRequest, fmt.Errorf("ticker should not be empty %s", ticker))
+			return
+		}
+		data := uc.GetOrderInfos(r.Context(), ticker)
 		writeJSON(w, http.StatusOK, data)
 	}))))
 }

@@ -26,12 +26,11 @@ func NewOrderRouter(usecase *order.OrderUseCase) OrderRouter {
 
 func (or *orderRouterImpl) Add(w http.ResponseWriter, r *http.Request) {
 	type AddOrderRequest struct {
-		Side     model.Side      `json:"side"` // "BID" or "ASK" (or BUY/SELL depending on your model)
+		Side     model.Side      `json:"side"`
 		Price    model.Price     `json:"price"`
 		Quantity model.Quantity  `json:"quantity"`
-		Type     model.OrderType `json:"type"` // e.g., LIMIT, MARKET, FOK, IOC, etc.
+		Type     model.OrderType `json:"type"`
 		Ticker   string          `json:"ticker"`
-		// Optional: ClientOrderID string `json:"clientOrderId,omitempty"`
 	}
 	type AddOrderResponse struct {
 		OrderID model.OrderId  `json:"orderId"`
@@ -78,6 +77,7 @@ func (or *orderRouterImpl) Modify(w http.ResponseWriter, r *http.Request) {
 		Price    model.Price     `json:"price,omitempty"`
 		Quantity model.Quantity  `json:"quantity,omitempty"`
 		Type     model.OrderType `json:"type,omitempty"`
+		Ticker   string          `json:"ticker"`
 	}
 	type ModifyOrderResponse struct {
 		OrderID model.OrderId  `json:"orderId"`
@@ -104,7 +104,7 @@ func (or *orderRouterImpl) Modify(w http.ResponseWriter, r *http.Request) {
 	}
 	newType := req.Type
 	uc := *or.usecase
-	trades, err := uc.ModifyOrder(r.Context(), modify, newType)
+	trades, err := uc.ModifyOrder(r.Context(), modify, newType, req.Ticker)
 	if err != nil {
 		writeJSON(w, http.StatusUnprocessableEntity, ModifyOrderResponse{
 			OrderID: req.ID,

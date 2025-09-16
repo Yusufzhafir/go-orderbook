@@ -32,6 +32,7 @@ CREATE TABLE orders (
     ticker_ledger_id BIGINT NOT NULL,            
     type        SMALLINT    NOT NULL,            
     quantity    BIGINT      NOT NULL,            
+    filled    BIGINT      NOT NULL,            
     price       BIGINT      NOT NULL,            
     is_active   BOOLEAN     NOT NULL DEFAULT TRUE, 
     created_at  TIMESTAMPTZ NOT NULL DEFAULT NOW(),

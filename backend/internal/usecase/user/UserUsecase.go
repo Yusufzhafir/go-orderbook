@@ -149,7 +149,6 @@ func (uc *userUseCaseImpl) GetProfile(ctx context.Context, userID int64) (*UserP
 	ledgerRepo := *uc.ledgerRepo
 	tx := uc.db.MustBeginTx(ctx, nil)
 	userLedger, err := ledgerRepo.GetUserLedgerByLedgerTBId(ctx, tx, userID, model.CASH_LEDGER)
-	log.Printf("userledger,%v,err %v,userId %d", userLedger, err, userID)
 	if err != nil {
 		return nil, err
 	}

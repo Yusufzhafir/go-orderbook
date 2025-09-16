@@ -13,7 +13,6 @@ import (
 	"syscall"
 	"time"
 
-	"github.com/Yusufzhafir/go-orderbook/backend/internal/engine"
 	userLedgerRepository "github.com/Yusufzhafir/go-orderbook/backend/internal/repository/ledger"
 	orderRepository "github.com/Yusufzhafir/go-orderbook/backend/internal/repository/order"
 	userRepository "github.com/Yusufzhafir/go-orderbook/backend/internal/repository/user"
@@ -26,7 +25,6 @@ import (
 	"github.com/jmoiron/sqlx"
 	"github.com/joho/godotenv"
 	tb "github.com/tigerbeetle/tigerbeetle-go"
-	"github.com/tigerbeetle/tigerbeetle-go/pkg/types"
 	tbTypes "github.com/tigerbeetle/tigerbeetle-go/pkg/types"
 
 	_ "github.com/lib/pq"
@@ -57,9 +55,6 @@ func main() {
 		logger.Fatal("Error loading .env file")
 	}
 
-	ob := engine.NewOrderBookEngine()
-	ob.Initialize()
-
 	tbAdress := os.Getenv("TB_ADDRESS")
 	if tbAdress == "" {
 		tbAdress = "3001"
@@ -74,7 +69,7 @@ func main() {
 	tBClusterAddrs := []string{tbAdress}
 	tbClient, err := tb.NewClient(tbTypes.ToUint128(tbClusterId), tBClusterAddrs)
 	if err != nil {
-		logger.Fatalf("tigerbeetle client init: %w", err)
+		logger.Fatalf("tigerbeetle client init: %v", err)
 		return
 	}
 	hub := websocket.NewHub(logger)
@@ -114,13 +109,12 @@ func main() {
 		TbClient:   &tbClient,
 	}
 	usecaseOpts := order.OrderUseCaseOpts{
-		OrderBookEngine: ob,
-		TBLedgerID:      uint32(0),
-		EscrowAccount:   types.BigIntToUint128(*big.NewInt(1)),
-		TbClient:        &tbClient,
-		Db:              db,
-		LedgerRepo:      &userLedgerRepo,
-		OrderRepo:       &orderRepository,
+		TBLedgerID:    uint32(0),
+		EscrowAccount: tbTypes.BigIntToUint128(*big.NewInt(1)),
+		TbClient:      &tbClient,
+		Db:            db,
+		LedgerRepo:    &userLedgerRepo,
+		OrderRepo:     &orderRepository,
 	}
 
 	orderUseCase := order.NewOrderUseCase(rootCtx, usecaseOpts)

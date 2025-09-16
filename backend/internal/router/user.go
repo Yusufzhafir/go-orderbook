@@ -11,14 +11,6 @@ import (
 	"github.com/Yusufzhafir/go-orderbook/backend/internal/usecase/user"
 )
 
-// serverRouter.Handle("GET /api/v1/user/", authmiddleware(logging(http.HandlerFunc(defaultHandler))))
-// 	serverRouter.Handle("GET /api/v1/user/order-list", authmiddleware(logging(http.HandlerFunc(defaultHandler))))
-// 	serverRouter.Handle("GET /api/v1/user/transactions", authmiddleware(logging(http.HandlerFunc(defaultHandler))))
-// 	serverRouter.Handle("GET /api/v1/user/portfolio", authmiddleware(logging(http.HandlerFunc(defaultHandler))))
-// 	serverRouter.Handle("POST /api/v1/user/money", authmiddleware(logging(http.HandlerFunc(defaultHandler))))
-// 	serverRouter.Handle("POST /api/v1/user/register", authmiddleware(logging(http.HandlerFunc(defaultHandler))))
-// 	serverRouter.Handle("POST /api/v1/user/login", authmiddleware(logging(http.HandlerFunc(defaultHandler))))
-
 type UserRouter interface {
 	GetUser(w http.ResponseWriter, r *http.Request)
 	GetUserOrderList(w http.ResponseWriter, r *http.Request)
@@ -37,8 +29,9 @@ type userRouterImpl struct {
 
 func NewUserRouter(usecase *user.UserUseCase, tokenMaker *middleware.JWTMaker, orderUsecase *order.OrderUseCase) UserRouter {
 	return &userRouterImpl{
-		usecase:    usecase,
-		tokenMaker: tokenMaker,
+		usecase:      usecase,
+		tokenMaker:   tokenMaker,
+		orderUsecase: orderUsecase,
 	}
 }
 
@@ -47,7 +40,7 @@ func (ur *userRouterImpl) GetUser(w http.ResponseWriter, r *http.Request) {
 		Id        string    `json:"id"`
 		CreatedAt time.Time `json:"created_at"`
 		Username  string    `json:"username"`
-		Balance   string    `json:"balance""`
+		Balance   string    `json:"balance"`
 	}
 	claims := r.Context().Value(middleware.AuthKey{}).(*middleware.UserClaims)
 
@@ -66,8 +59,8 @@ func (ur *userRouterImpl) GetUser(w http.ResponseWriter, r *http.Request) {
 
 }
 func (ur *userRouterImpl) GetUserOrderList(w http.ResponseWriter, r *http.Request) {
-	userID := r.Context().Value(middleware.AuthKey{}).(*middleware.UserClaims)
-	orders, err := (*ur.orderUsecase).GetOrderByUserId(r.Context(), userID.UserId)
+	userClaim := r.Context().Value(middleware.AuthKey{}).(*middleware.UserClaims)
+	orders, err := (*ur.orderUsecase).GetOrderByUserId(r.Context(), userClaim.UserId, true)
 	if err != nil {
 		writeJSON(w, http.StatusInternalServerError, map[string]string{"error": err.Error()})
 		return
@@ -159,7 +152,7 @@ func (ur *userRouterImpl) LoginUser(w http.ResponseWriter, r *http.Request) {
 
 	tokenMaker := *ur.tokenMaker
 	newToken, newClaim, err := tokenMaker.CreateToken(user.ID, req.Username, time.Hour*24)
-	if err != nil || user == nil {
+	if err != nil {
 		writeJSONError(w, http.StatusBadRequest, err)
 		return
 	}
