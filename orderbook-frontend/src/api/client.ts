@@ -85,7 +85,7 @@ export interface UserProfile {
   id: number;
   username: string;
   created_at: string;
-  balance : number
+  balance: number
 }
 export interface LoginRequest {
   username: string;
@@ -123,7 +123,7 @@ export interface UserOrder {
   ID: number
   UserID: number
   TickerID: number
-  Ticker : string,
+  Ticker: string,
   Side: Side
   TickerLedgerID: number
   Type: OrderType
@@ -177,9 +177,9 @@ export const api = {
         method: "GET",
       }),
   },
-  ticker : {
-    tickerList : () =>http<TickerListResponse>("/api/v1/ticker",{
-      method : "GET"
+  ticker: {
+    tickerList: () => http<TickerListResponse>("/api/v1/ticker", {
+      method: "GET"
     })
   },
   user: {

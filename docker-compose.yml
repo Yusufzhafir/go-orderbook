@@ -46,7 +46,7 @@ services:
       DB_USER: ${DB_USER:-myuser}
       DB_PASSWORD: ${DB_PASSWORD:-mypassword}
       DB_NAME: ${DB_NAME:-orderbook_db}
-      TB_ADDRESS : ${TB_ADDRESS:-3001}
+      TB_ADDRESS : ${TB_ADDRESS:-172.17.0.1:3001}
       TB_CLUSTER_ID: ${TB_CLUSTER_ID:-1}
     ports:
       - "8080:8080"
