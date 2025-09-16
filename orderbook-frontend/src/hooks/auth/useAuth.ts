@@ -27,6 +27,7 @@ export function useMe() {
     queryKey: ["me"],
     queryFn: () => api.user.getMe(),
     retry: false,
+    refetchInterval: 1000,
   });
 }
 

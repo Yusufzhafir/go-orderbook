@@ -1,13 +1,13 @@
 "use client"
 
-import { useLogin } from "@/hooks/auth/useAuth";
+import { useMe } from "@/hooks/auth/useAuth";
 import { Button } from "../ui/button";
 import { Github } from "lucide-react";
 import LoginDialog from "./LoginDialog";
 import RegisterDialog from "./registerDialog";
 
 const Navbar = () => {
-    const login = useLogin()
+    const { data } = useMe()
     return (
         <div className="flex w-full bg-zinc-200 p-4 rounded-b-2xl shadow">
             <div className="flex w-full items-center gap-4">
@@ -30,8 +30,17 @@ const Navbar = () => {
 
             </div>
             <div className="flex gap-4">
-                <LoginDialog/>
-                <RegisterDialog/>
+                <div className="font-bold capitalize text-md">
+                    name : <span className="font-medium text-sm">{data?.username}</span>
+                </div>
+                <div className="font-bold capitalize text-md">
+                    balance : <span className="font-medium text-sm">{data?.balance.toLocaleString("us", {
+                        minimumFractionDigits: 2,
+                        maximumFractionDigits: 2
+                    })} USD</span>
+                </div>
+                <LoginDialog />
+                <RegisterDialog />
             </div>
         </div>
     );

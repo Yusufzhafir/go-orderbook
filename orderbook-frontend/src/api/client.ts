@@ -41,7 +41,7 @@ export interface AddOrderRequest {
   price: number; // uint64 server-side (send in smallest unit)
   quantity: number; // uint64 server-side
   type: OrderType;
-  ticker : string
+  ticker: string
 }
 export interface AddOrderResponse {
   orderId: number;
@@ -52,11 +52,12 @@ export interface AddOrderResponse {
 
 export interface ModifyOrderRequest {
   id: number;
-  price?: number;
-  quantity?: number;
-  type?: OrderType;
-  ticker : string
+  price: number;
+  quantity: number;
+  type: OrderType;
+  ticker: string
 }
+
 export type ModifyOrderResponse = AddOrderResponse;
 
 export interface CancelOrderRequest {
@@ -84,6 +85,7 @@ export interface UserProfile {
   id: number;
   username: string;
   created_at: string;
+  balance : number
 }
 export interface LoginRequest {
   username: string;
@@ -101,18 +103,33 @@ export interface RegisterResponse {
   userId: number;
 }
 export interface AddUserMoneyRequest {
-  amount: number; // smallest unit (e.g., cents)
-  ticker: string; // e.g. "USD" / "IDR" / "STOCK_X"
+  amount: number;
 }
 export interface AddUserMoneyResponse {
-  status: "accepted" | "rejected";
   message?: string;
 }
+
+export interface UserOrder {
+  ID: number
+  UserID: number
+  TickerID: number
+  Side: number
+  TickerLedgerID: number
+  Type: number
+  Quantity: number
+  Filled: number
+  Price: number
+  IsActive: boolean
+  CreatedAt: string
+  ClosedAt: string
+}
+
+export type UserOrderList = UserOrder[]
 
 async function http<T>(path: string, init: RequestInit): Promise<T> {
   const headers: Record<string, string> = {
     "Content-Type": "application/json",
-    ...(init.headers as any),
+    ...(init.headers as Record<string, string>),
   };
 
   // Attach JWT if present (all protected routes use authmiddleware)
@@ -174,7 +191,7 @@ export const api = {
     getMe: () =>
       http<UserProfile>("/api/v1/user/", { method: "GET" }),
     getMyOrders: () =>
-      http<{ orders: any[] }>("/api/v1/user/order-list", {
+      http<{ orders: UserOrderList }>("/api/v1/user/order-list", {
         method: "GET",
       }),
     addMoney: (b: AddUserMoneyRequest) =>

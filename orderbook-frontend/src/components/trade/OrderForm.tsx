@@ -1,7 +1,7 @@
 "use client";
 import * as React from "react";
 import { useMutation } from "@tanstack/react-query";
-import { api, MapOrderType, ModifyOrderRequest, OrderTypeString, Side } from "@/api/client";
+import { api, MapOrderType, OrderTypeString, Side } from "@/api/client";
 import { Card } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
