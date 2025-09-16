@@ -1,42 +1,48 @@
-const API_BASE = process.env.NEXT_PUBLIC_API_BASE ?? "";
+// src/lib/api.ts
+"use client";
+
+import { getAccessToken } from "@/lib/token";
+
+export const API_BASE = process.env.NEXT_PUBLIC_API_BASE ?? "";
 
 export enum Side {
   BID,
-  ASK
+  ASK,
 }
 
-export type OrderTypeString = "LIMIT" | "MARKET"
+export type OrderTypeString = "LIMIT" | "MARKET";
 export enum OrderType {
   ORDER_FILL_AND_KILL,
-  ORDER_GOOD_TILL_CANCEL
+  ORDER_GOOD_TILL_CANCEL,
 }
 
 export function MapOrderType(orderType: OrderTypeString) {
   switch (orderType) {
     case "LIMIT":
-      return OrderType.ORDER_GOOD_TILL_CANCEL
+      return OrderType.ORDER_GOOD_TILL_CANCEL;
     case "MARKET":
-      return OrderType.ORDER_FILL_AND_KILL
+      return OrderType.ORDER_FILL_AND_KILL;
     default:
-      return OrderType.ORDER_FILL_AND_KILL
+      return OrderType.ORDER_FILL_AND_KILL;
   }
 }
 
-interface MatchorderType {
-  Side: number
-  MakerID: number
-  TakerID: number
-  Price: number
-  Quantity: number
-  Timestamp: string
-}
-export interface AddOrderRequest {
-  side: Side;
-  price: number;     // uint64 server-side
-  quantity: number;  // uint64 server-side
-  type: OrderType;
+export interface MatchorderType {
+  Side: number;
+  MakerID: number;
+  TakerID: number;
+  Price: number;
+  Quantity: number;
+  Timestamp: string;
 }
 
+export interface AddOrderRequest {
+  side: Side;
+  price: number; // uint64 server-side (send in smallest unit)
+  quantity: number; // uint64 server-side
+  type: OrderType;
+  ticker : string
+}
 export interface AddOrderResponse {
   orderId: number;
   trades?: MatchorderType[];
@@ -49,45 +55,132 @@ export interface ModifyOrderRequest {
   price?: number;
   quantity?: number;
   type?: OrderType;
+  ticker : string
 }
-export type ModifyOrderResponse =  AddOrderResponse
+export type ModifyOrderResponse = AddOrderResponse;
 
-export interface CancelOrderRequest { id: number; }
+export interface CancelOrderRequest {
+  id: number;
+}
 export interface CancelOrderResponse {
   orderId: number;
   status: "accepted" | "rejected";
   message?: string;
 }
 
-export interface OrderBookResponse {
-  bids: OrderBookLevel[]
-  asks: OrderBookLevel[]
-  timestamp: number
-}
-
 export interface OrderBookLevel {
-  price: number
-  volume: number
-  orderCount: number
+  price: number;
+  volume: number;
+  orderCount: number;
+}
+export interface OrderBookResponse {
+  bids: OrderBookLevel[];
+  asks: OrderBookLevel[];
+  timestamp: number;
 }
 
+/** User & Auth types */
+export interface UserProfile {
+  id: number;
+  username: string;
+  created_at: string;
+}
+export interface LoginRequest {
+  username: string;
+  password: string;
+}
+export interface LoginResponse {
+  token: string; // JWT
+  user: UserProfile;
+}
+export interface RegisterRequest {
+  username: string;
+  password: string;
+}
+export interface RegisterResponse {
+  userId: number;
+}
+export interface AddUserMoneyRequest {
+  amount: number; // smallest unit (e.g., cents)
+  ticker: string; // e.g. "USD" / "IDR" / "STOCK_X"
+}
+export interface AddUserMoneyResponse {
+  status: "accepted" | "rejected";
+  message?: string;
+}
 
 async function http<T>(path: string, init: RequestInit): Promise<T> {
-  const res = await fetch(`${API_BASE}${path}`, {
-    ...init,
-    headers: { "Content-Type": "application/json", ...(init.headers || {}) },
-  });
-  if (!res.ok) throw new Error((await res.text()) || `HTTP ${res.status}`);
+  const headers: Record<string, string> = {
+    "Content-Type": "application/json",
+    ...(init.headers as any),
+  };
+
+  // Attach JWT if present (all protected routes use authmiddleware)
+  const token = getAccessToken();
+  if (token) headers["Authorization"] = `Bearer ${token}`;
+
+  const res = await fetch(`${API_BASE}${path}`, { ...init, headers });
+  if (!res.ok) {
+    const txt = await res.text();
+    throw new Error(txt || `HTTP ${res.status}`);
+  }
   return res.json() as Promise<T>;
 }
 
 export const api = {
-  addOrder: (b: AddOrderRequest) =>
-    http<AddOrderResponse>("/api/v1/order/add", { method: "POST", body: JSON.stringify(b) }),
-  modifyOrder: (b: ModifyOrderRequest) =>
-    http<ModifyOrderResponse>("/api/v1/order/modify", { method: "PUT", body: JSON.stringify(b) }),
-  cancelOrder: (b: CancelOrderRequest) =>
-    http<CancelOrderResponse>("/api/v1/order/cancel", { method: "DELETE", body: JSON.stringify(b) }),
-  fetchOrderBook: (ticker: string) =>
-    http<OrderBookResponse>(`/api/v1/ticker/${ticker}/order-list`, { method: "GET" }),
+  order: {
+    addOrder: (b: AddOrderRequest) =>
+      http<AddOrderResponse>("/api/v1/order/add", {
+        method: "POST",
+        body: JSON.stringify(b),
+      }),
+    modifyOrder: (b: ModifyOrderRequest) =>
+      http<ModifyOrderResponse>("/api/v1/order/modify", {
+        method: "PUT",
+        body: JSON.stringify(b),
+      }),
+    cancelOrder: (b: CancelOrderRequest) =>
+      http<CancelOrderResponse>("/api/v1/order/cancel", {
+        method: "DELETE",
+        body: JSON.stringify(b),
+      }),
+    fetchOrderBook: (ticker: string) =>
+      http<OrderBookResponse>(`/api/v1/ticker/${ticker}/order-list`, {
+        method: "GET",
+      }),
+  },
+  user: {
+    /** Public routes (no JWT) */
+    register: (b: RegisterRequest) =>
+      fetch(`${API_BASE}/api/v1/user/register`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(b),
+      }).then(async (r) => {
+        if (!r.ok) throw new Error((await r.text()) || `HTTP ${r.status}`);
+        return (await r.json()) as RegisterResponse;
+      }),
+    login: (b: LoginRequest) =>
+      fetch(`${API_BASE}/api/v1/user/login`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(b),
+      }).then(async (r) => {
+        if (!r.ok) throw new Error((await r.text()) || `HTTP ${r.status}`);
+        return (await r.json()) as LoginResponse;
+      }),
+
+    /** Protected routes (JWT required) */
+    getMe: () =>
+      http<UserProfile>("/api/v1/user/", { method: "GET" }),
+    getMyOrders: () =>
+      http<{ orders: any[] }>("/api/v1/user/order-list", {
+        method: "GET",
+      }),
+    addMoney: (b: AddUserMoneyRequest) =>
+      http<AddUserMoneyResponse>("/api/v1/user/money", {
+        method: "POST",
+        body: JSON.stringify(b),
+      }),
+  },
 };
