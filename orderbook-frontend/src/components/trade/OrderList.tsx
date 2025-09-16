@@ -70,7 +70,8 @@ export default function OrderList({ ticker }: { ticker?: string }) {
                   <th className="py-2 pr-2">Ticker</th>
                   <th className="py-2 pr-2">Price</th>
                   <th className="py-2 pr-2">Qty</th>
-                  <th className="py-2 pr-2">Status</th>
+                  <th className="py-2 pr-2">F Qty</th>
+                  <th className="py-2 pr-2">Sts</th>
                   <th className="py-2 pr-2 w-24"></th>
                 </tr>
               </thead>
@@ -92,6 +93,7 @@ export default function OrderList({ ticker }: { ticker?: string }) {
                     <td className="py-2 pr-2">{o.Ticker}</td>
                     <td className="py-2 pr-2">{o.Price}</td>
                     <td className="py-2 pr-2">{o.Quantity}</td>
+                    <td className="py-2 pr-2">{o.Filled}</td>
                     <td className="py-2 pr-2">
                       <span className="text-xs text-gray-600">
                         {statusLabel(o.IsActive, o.ClosedAt)}
