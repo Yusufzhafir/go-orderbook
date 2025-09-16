@@ -15,6 +15,7 @@ import (
 
 	"github.com/Yusufzhafir/go-orderbook/backend/internal/engine"
 	userLedgerRepository "github.com/Yusufzhafir/go-orderbook/backend/internal/repository/ledger"
+	orderRepository "github.com/Yusufzhafir/go-orderbook/backend/internal/repository/order"
 	userRepository "github.com/Yusufzhafir/go-orderbook/backend/internal/repository/user"
 	"github.com/Yusufzhafir/go-orderbook/backend/internal/router"
 	"github.com/Yusufzhafir/go-orderbook/backend/internal/router/middleware"
@@ -24,7 +25,9 @@ import (
 	"github.com/Yusufzhafir/go-orderbook/backend/pkg/model"
 	"github.com/jmoiron/sqlx"
 	"github.com/joho/godotenv"
+	tb "github.com/tigerbeetle/tigerbeetle-go"
 	"github.com/tigerbeetle/tigerbeetle-go/pkg/types"
+	tbTypes "github.com/tigerbeetle/tigerbeetle-go/pkg/types"
 
 	_ "github.com/lib/pq"
 )
@@ -59,26 +62,20 @@ func main() {
 
 	tbAdress := os.Getenv("TB_ADDRESS")
 	if tbAdress == "" {
-		tbAdress = "3000"
+		tbAdress = "3001"
 	}
 
 	tbClusterId, err := strconv.ParseUint(os.Getenv("TB_CLUSTER_ID"), 0, 64)
 
 	if err != nil {
-		tbClusterId = 0
+		tbClusterId = 1
 	}
 
-	usecaseOpts := order.OrderUseCaseOpts{
-		OrderBookEngine: ob,
-		TBClusterAddrs:  []string{tbAdress},
-		TBLedgerID:      uint32(0),
-		TBClusterId:     tbClusterId,
-		EscrowAccount:   types.BigIntToUint128(*big.NewInt(1)),
-	}
-	orderUseCase, err := order.NewOrderUseCase(rootCtx, usecaseOpts)
-
+	tBClusterAddrs := []string{tbAdress}
+	tbClient, err := tb.NewClient(tbTypes.ToUint128(tbClusterId), tBClusterAddrs)
 	if err != nil {
-		logger.Fatalf("error creating order usecase: %v", err)
+		logger.Fatalf("tigerbeetle client init: %w", err)
+		return
 	}
 	hub := websocket.NewHub(logger)
 	go hub.Run(rootCtx)
@@ -106,12 +103,27 @@ func main() {
 	if err != nil {
 		logger.Fatalf("error connecting postgres: %v", err)
 	}
+
+	orderRepository := orderRepository.NewOrderRepository(db)
 	userRepo := userRepository.NewUserRepository(db)
 	userLedgerRepo := userLedgerRepository.NewLedgerRepository(db)
 	userUseCaseOpts := user.UserUseCaseOpts{
 		UserRepo:   &userRepo,
 		LedgerRepo: &userLedgerRepo,
+		Db:         db,
+		TbClient:   &tbClient,
 	}
+	usecaseOpts := order.OrderUseCaseOpts{
+		OrderBookEngine: ob,
+		TBLedgerID:      uint32(0),
+		EscrowAccount:   types.BigIntToUint128(*big.NewInt(1)),
+		TbClient:        &tbClient,
+		Db:              db,
+		LedgerRepo:      &userLedgerRepo,
+		OrderRepo:       &orderRepository,
+	}
+
+	orderUseCase := order.NewOrderUseCase(rootCtx, usecaseOpts)
 	userUsecase := user.NewUserUseCase(userUseCaseOpts)
 	tokenMaker := middleware.NewJWTMaker(jwtSecret)
 	//bind router

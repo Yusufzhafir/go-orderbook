@@ -2,10 +2,12 @@ package router
 
 import (
 	"fmt"
+	"math/big"
 	"net/http"
 	"time"
 
 	"github.com/Yusufzhafir/go-orderbook/backend/internal/router/middleware"
+	"github.com/Yusufzhafir/go-orderbook/backend/internal/usecase/order"
 	"github.com/Yusufzhafir/go-orderbook/backend/internal/usecase/user"
 )
 
@@ -28,11 +30,12 @@ type UserRouter interface {
 }
 
 type userRouterImpl struct {
-	usecase    *user.UserUseCase
-	tokenMaker *middleware.JWTMaker
+	usecase      *user.UserUseCase
+	orderUsecase *order.OrderUseCase
+	tokenMaker   *middleware.JWTMaker
 }
 
-func NewUserRouter(usecase *user.UserUseCase, tokenMaker *middleware.JWTMaker) UserRouter {
+func NewUserRouter(usecase *user.UserUseCase, tokenMaker *middleware.JWTMaker, orderUsecase *order.OrderUseCase) UserRouter {
 	return &userRouterImpl{
 		usecase:    usecase,
 		tokenMaker: tokenMaker,
@@ -44,6 +47,7 @@ func (ur *userRouterImpl) GetUser(w http.ResponseWriter, r *http.Request) {
 		Id        string    `json:"id"`
 		CreatedAt time.Time `json:"created_at"`
 		Username  string    `json:"username"`
+		Balance   string    `json:"balance""`
 	}
 	claims := r.Context().Value(middleware.AuthKey{}).(*middleware.UserClaims)
 
@@ -57,17 +61,47 @@ func (ur *userRouterImpl) GetUser(w http.ResponseWriter, r *http.Request) {
 		Id:        fmt.Sprintf("%d", (*user).ID),
 		CreatedAt: (*user).CreatedAt,
 		Username:  user.Username,
+		Balance:   (*user).UserBalance,
 	})
 
 }
 func (ur *userRouterImpl) GetUserOrderList(w http.ResponseWriter, r *http.Request) {
+	userID := r.Context().Value(middleware.AuthKey{}).(*middleware.UserClaims)
+	orders, err := (*ur.orderUsecase).GetOrderByUserId(r.Context(), userID.UserId)
+	if err != nil {
+		writeJSON(w, http.StatusInternalServerError, map[string]string{"error": err.Error()})
+		return
+	}
+	writeJSON(w, http.StatusOK, orders)
 
 }
 func (ur *userRouterImpl) GetUserTransactions(w http.ResponseWriter, r *http.Request) {
 
 }
 func (ur *userRouterImpl) AddUserMoney(w http.ResponseWriter, r *http.Request) {
+	type AddMoneyReq struct {
+		Amount int64 `json:"amount"`
+	}
+	type AddMoneyRes struct {
+		Message string `json:"message"`
+	}
+	claims := r.Context().Value(middleware.AuthKey{}).(*middleware.UserClaims)
 
+	req, err := decodeJSON[AddMoneyReq](w, r)
+	if err != nil {
+		writeJSONError(w, http.StatusBadRequest, err)
+		return
+	}
+
+	errTransfer := (*ur.usecase).TopupMoney(r.Context(), claims.UserId, big.NewInt(req.Amount))
+	if errTransfer != nil {
+		writeJSONError(w, http.StatusBadRequest, errTransfer)
+		return
+	}
+
+	writeJSON(w, http.StatusOK, AddMoneyRes{
+		Message: fmt.Sprintf("successfully added %d to your account", req.Amount),
+	})
 }
 func (ur *userRouterImpl) RegisterUser(w http.ResponseWriter, r *http.Request) {
 	type RegisterRequest struct {

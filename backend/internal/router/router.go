@@ -102,14 +102,14 @@ func bindOrder(serverRouter *http.ServeMux, usecase *order.OrderUseCase, tokenMa
 	serverRouter.Handle("PUT /api/v1/order/modify", logging(authmiddleware(http.HandlerFunc(newOrderRouter.Modify))))
 	serverRouter.Handle("DELETE /api/v1/order/cancel", logging(authmiddleware(http.HandlerFunc(newOrderRouter.Cancel))))
 }
-func bindUser(serverRouter *http.ServeMux, tokenMaker *middleware.JWTMaker, userUseCase *user.UserUseCase) {
+func bindUser(serverRouter *http.ServeMux, tokenMaker *middleware.JWTMaker, userUseCase *user.UserUseCase, orderUsecase *order.OrderUseCase) {
 	authmiddleware := middleware.AuthMiddleware(tokenMaker)
-	userRouter := NewUserRouter(userUseCase, tokenMaker)
+	userRouter := NewUserRouter(userUseCase, tokenMaker, orderUsecase)
 	serverRouter.Handle("GET /api/v1/user/", logging(authmiddleware(http.HandlerFunc(userRouter.GetUser))))
-	serverRouter.Handle("GET /api/v1/user/order-list", logging(authmiddleware(http.HandlerFunc(defaultHandler))))
+	serverRouter.Handle("GET /api/v1/user/order-list", logging(authmiddleware(http.HandlerFunc(userRouter.GetUserOrderList))))
 	serverRouter.Handle("GET /api/v1/user/transactions", logging(authmiddleware(http.HandlerFunc(defaultHandler))))
 	serverRouter.Handle("GET /api/v1/user/portfolio", logging(authmiddleware(http.HandlerFunc(defaultHandler))))
-	serverRouter.Handle("POST /api/v1/user/money", logging(authmiddleware(http.HandlerFunc(defaultHandler))))
+	serverRouter.Handle("POST /api/v1/user/money", logging(authmiddleware(http.HandlerFunc(userRouter.AddUserMoney))))
 	serverRouter.Handle("POST /api/v1/user/register", logging(http.HandlerFunc(userRouter.RegisterUser)))
 	serverRouter.Handle("POST /api/v1/user/login", logging(http.HandlerFunc(userRouter.LoginUser)))
 }
@@ -123,7 +123,7 @@ type BindRouterOpts struct {
 
 func BindRouter(opts BindRouterOpts) {
 	bindOrder(opts.ServerRouter, opts.OrderUseCase, opts.TokenMaker)
-	bindUser(opts.ServerRouter, opts.TokenMaker, opts.UserUseCase)
+	bindUser(opts.ServerRouter, opts.TokenMaker, opts.UserUseCase, opts.OrderUseCase)
 	bindTicker(opts.ServerRouter, opts.OrderUseCase, opts.TokenMaker)
 
 	//healthcheck

@@ -50,6 +50,10 @@ func (or *orderRouterImpl) Add(w http.ResponseWriter, r *http.Request) {
 		writeJSONError(w, http.StatusBadRequest, errors.New("quantity must be > 0"))
 		return
 	}
+	if req.Ticker == "" {
+		writeJSONError(w, http.StatusBadRequest, errors.New("ticker must not be empty"))
+		return
+	}
 
 	uc := *or.usecase
 	trades, orderID, err := uc.AddOrder(r.Context(), req.Ticker, req.Side, req.Price, req.Quantity, req.Type)

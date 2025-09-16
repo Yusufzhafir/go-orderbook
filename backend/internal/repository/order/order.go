@@ -45,6 +45,7 @@ type OrderRepository interface {
 	GetOrderByID(ctx context.Context, tx *sqlx.Tx, orderID uint64) (*OrderRecord, error)
 	ListOrdersByUser(ctx context.Context, tx *sqlx.Tx, userID int64, onlyActive bool) ([]OrderRecord, error)
 	CreateTrade(ctx context.Context, tx *sqlx.Tx, trade TradeRecord) error
+	GetOrderByUserId(ctx context.Context, tx *sqlx.Tx, userId int64) (*[]OrderRecord, error)
 }
 
 // --- Implementation ---
@@ -81,8 +82,20 @@ func (r *orderRepositoryImpl) GetOrderByID(ctx context.Context, tx *sqlx.Tx, ord
 	var ord OrderRecord
 	err := tx.GetContext(ctx, &ord,
 		`SELECT id, user_id, ticker_id, side, ticker_ledger_id, type, quantity, price, is_active, created_at, closed_at
-         FROM orders WHERE id=$1`,
+         FROM orders WHERE id=$1 LIMIT 1`,
 		orderID)
+	if err != nil {
+		return nil, err
+	}
+	return &ord, nil
+}
+
+func (r *orderRepositoryImpl) GetOrderByUserId(ctx context.Context, tx *sqlx.Tx, userId int64) (*[]OrderRecord, error) {
+	var ord []OrderRecord
+	err := tx.GetContext(ctx, &ord,
+		`SELECT id, user_id, ticker_id, side, ticker_ledger_id, type, quantity, price, is_active, created_at, closed_at
+         FROM orders WHERE user_id=$1`,
+		userId)
 	if err != nil {
 		return nil, err
 	}

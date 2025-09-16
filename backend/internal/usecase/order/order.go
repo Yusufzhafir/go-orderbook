@@ -32,6 +32,7 @@ type OrderUseCase interface {
 	GetOrderInfos(ctx context.Context) *model.MarketDepth
 
 	RegisterTradeHandler(handler TradeHandler)
+	GetOrderByUserId(ctx context.Context, userId int64) (*[]orderRepository.OrderRecord, error)
 }
 
 type orderUseCaseImpl struct {
@@ -60,30 +61,24 @@ type TradeHandler func(model.Trade)
 
 type OrderUseCaseOpts struct {
 	OrderBookEngine engine.OrderBookEngine
-	TBClusterAddrs  []string
-	TBClusterId     uint64
 	TBLedgerID      uint32
 	EscrowAccount   Uint128 // (optional global escrow, but we'll use per-ticker escrow accounts)
 	OrderRepo       *orderRepository.OrderRepository
 	LedgerRepo      *ledgerRepository.LedgerRepository
 	Db              *sqlx.DB
+	TbClient        *tb.Client
 }
 
-func NewOrderUseCase(ctx context.Context, opts OrderUseCaseOpts) (OrderUseCase, error) {
-	// Initialize TigerBeetle client (unchanged)
-	client, err := tb.NewClient(ToUint128(opts.TBClusterId), opts.TBClusterAddrs)
-	if err != nil {
-		return nil, fmt.Errorf("tigerbeetle client init: %w", err)
-	}
+func NewOrderUseCase(ctx context.Context, opts OrderUseCaseOpts) OrderUseCase {
 	return &orderUseCaseImpl{
 		orderBookEngine: opts.OrderBookEngine,
-		tbClient:        &client,
+		tbClient:        opts.TbClient,
 		ledgerID:        opts.TBLedgerID,
 		escrowAccount:   opts.EscrowAccount,
 		orderRepo:       opts.OrderRepo,
 		ledgerRepo:      opts.LedgerRepo,
 		db:              opts.Db,
-	}, nil
+	}
 }
 
 func (ou *orderUseCaseImpl) RegisterTradeHandler(handler TradeHandler) {
@@ -101,6 +96,7 @@ func (ou *orderUseCaseImpl) AddOrder(ctx context.Context, ticker string, side mo
 	defer tx.Rollback()
 
 	tickereLedger, err := (*ou.ledgerRepo).GetLedgerByTicker(ctx, tx, ticker)
+	log.Printf("tickerledger %v err %v", tickereLedger, err)
 	if err != nil {
 		return nil, 0, err
 	}
@@ -111,7 +107,7 @@ func (ou *orderUseCaseImpl) AddOrder(ctx context.Context, ticker string, side mo
 		if err != nil {
 			return nil, 0, fmt.Errorf("failed to get asset ticker: %w", err)
 		}
-		quoteTicker, err := (*ou.ledgerRepo).GetLedgerByTicker(ctx, tx, "USD") // replace "USD" with your quote currency
+		quoteTicker, err := (*ou.ledgerRepo).GetLedgerByTicker(ctx, tx, model.CASH_TICKER) // replace "USD" with your quote currency
 		if err != nil {
 			return nil, 0, fmt.Errorf("failed to get quote ticker: %w", err)
 		}
@@ -136,7 +132,10 @@ func (ou *orderUseCaseImpl) AddOrder(ctx context.Context, ticker string, side mo
 			err = ou.reserveFunds(ctx,
 				userCashTb,   // user's fiat account (debit)
 				tickerEscrow, // quote currency escrow account (credit)
-				BigIntToUint128(*cashAmount), 1001)
+				BigIntToUint128(*cashAmount),
+				1001,
+				model.CASH_LEDGER,
+			)
 			if err != nil {
 				return nil, 0, fmt.Errorf("fund reservation failed: %w", err)
 			}
@@ -157,7 +156,10 @@ func (ou *orderUseCaseImpl) AddOrder(ctx context.Context, ticker string, side mo
 			err = ou.reserveFunds(ctx,
 				userAssetb,
 				tickerEscrow,
-				BigIntToUint128(*assetQty), 1002)
+				BigIntToUint128(*assetQty),
+				1002,
+				uint32(userAssetAcct.LedgerID),
+			)
 			if err != nil {
 				return nil, 0, fmt.Errorf("asset reservation failed: %w", err)
 			}
@@ -235,8 +237,8 @@ func (ou *orderUseCaseImpl) AddOrder(ctx context.Context, ticker string, side mo
 		}
 
 		// Fetch buyer’s asset account and seller’s cash account (for settlement)
-		assetLedgerID := int64(ou.ledgerID) //TODO fetch ticker ledger id
-		quoteLedgerID := int64(10)          /* quote currency ticker ID, e.g., quoteTicker.ID */
+		assetLedgerID := int64(ou.ledgerID)       //TODO fetch ticker ledger id
+		quoteLedgerID := int64(model.CASH_LEDGER) /* quote currency ticker ID, e.g., quoteTicker.ID */
 		buyerAssetAcct, err = (*ou.ledgerRepo).GetUserLedger(ctx, tx, buyerID, assetLedgerID)
 		if err != nil {
 			return nil, orderID, err
@@ -429,20 +431,39 @@ func (ou *orderUseCaseImpl) CancelOrder(ctx context.Context, orderID model.Order
 }
 
 func (ou *orderUseCaseImpl) ModifyOrder(ctx context.Context, modify model.OrderModify, orderType model.OrderType) ([]*model.Trade, error) {
+	tx := ou.db.MustBeginTx(ctx, nil)
+	defer tx.Rollback()
+	// Fetch the current order record
+	ordRec, err := (*ou.orderRepo).GetOrderByID(ctx, tx, uint64(modify.ID))
+	if err != nil {
+		return nil, fmt.Errorf("order not found: %w", err)
+	}
 
-	// Consider adjusting reservations if price/quantity increases.
-
+	// 2. Update order record with new parameters
+	ordRec.Price = uint64(modify.Price)
+	ordRec.Quantity = uint64(modify.Quantity)
+	ordRec.Side = int8(modify.Side)
+	ordRec.Type = uint8(orderType)
+	// (Reset is_active in case it was closed due to partial fill; ensure it's open for the new order)
+	ordRec.IsActive = true
+	err = (*ou.orderRepo).UpdateOrder(ctx, tx, *ordRec)
+	if err != nil {
+		return nil, fmt.Errorf("failed to update order: %w", err)
+	}
+	// 3. Submit the updated order to engine
 	trades, err := ou.orderBookEngine.ModifyOrder(modify, orderType)
 	if err != nil {
 		return nil, err
 	}
-	for _, trade := range trades {
+	// 4. Handle any trades resulting from the modify (similar to AddOrder logic above)
+	for _, tr := range trades {
 		if ou.tradeHandler != nil {
-			ou.tradeHandler(*trade)
+			ou.tradeHandler(*tr)
 		}
-	}
-	return trades, nil
 
+	}
+	tx.Commit()
+	return trades, nil
 }
 
 func (ou *orderUseCaseImpl) OrderSize(ctx context.Context) int {
@@ -463,10 +484,14 @@ func (ou *orderUseCaseImpl) GetOrderInfos(ctx context.Context) *model.MarketDept
 
 }
 
+func (ou *orderUseCaseImpl) GetOrderByUserId(ctx context.Context, userId int64) (*[]orderRepository.OrderRecord, error) {
+	tx := ou.db.MustBeginTx(ctx, nil)
+	return (*ou.orderRepo).GetOrderByUserId(ctx, tx, userId)
+}
+
 // TigerBeetle helpers:
 
-// reserveFunds creates a transfer user -> escrow (for cash or asset).
-func (ou *orderUseCaseImpl) reserveFunds(ctx context.Context, debit Uint128, credit Uint128, amount Uint128, code uint16) error {
+func (ou *orderUseCaseImpl) reserveFunds(ctx context.Context, debit Uint128, credit Uint128, amount Uint128, code uint16, ledger uint32) error {
 
 	transfers := []Transfer{
 
@@ -480,13 +505,11 @@ func (ou *orderUseCaseImpl) reserveFunds(ctx context.Context, debit Uint128, cre
 
 			Amount: amount,
 
-			Ledger: ou.ledgerID,
+			Ledger: ledger,
 
 			Code: code,
 
 			Flags: 0,
-
-			Timestamp: uint64(time.Now().UnixNano()),
 		},
 	}
 

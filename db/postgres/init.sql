@@ -16,7 +16,8 @@ CREATE TABLE ticker (
 CREATE TABLE users_ledger (
     id            BIGSERIAL    PRIMARY KEY,
     user_id       INT          REFERENCES users(id),
-    ledger_id     BIGINT          REFERENCES ticker(id),
+    ledger_id     BIGINT       REFERENCES ticker(id),
+    ledger_tb_id  BIGINT       NOT NULL,
     tb_account_id NUMERIC(38,0) NOT NULL,
     is_escrow     BOOLEAN      DEFAULT FALSE,
     created_at    TIMESTAMPTZ  NOT NULL DEFAULT NOW(),

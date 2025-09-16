@@ -23,6 +23,7 @@ type UserLedger struct {
 	TBAccountID string    `db:"tb_account_id"`
 	IsEscrow    bool      `db:"is_escrow"`
 	CreatedAt   time.Time `db:"created_at"`
+	LedgerTbId  int64     `db:"ledger_tb_id"`
 }
 
 // --- Interface ---
@@ -35,8 +36,9 @@ type LedgerRepository interface {
 	UpdateEscrowAccount(ctx context.Context, tx *sqlx.Tx, ledgerID int64, escrowAccountID int64) error
 
 	// UserLedger
-	CreateUserLedger(ctx context.Context, tx *sqlx.Tx, userID int64, ledgerID int64, tbAccountID *big.Int, isEscrow bool) (int64, error)
+	CreateUserLedger(ctx context.Context, tx *sqlx.Tx, userID int64, ledgerID int64, ledgerTbID int64, tbAccountID *big.Int, isEscrow bool) (int64, error)
 	GetUserLedger(ctx context.Context, tx *sqlx.Tx, userID int64, ledgerID int64) (*UserLedger, error)
+	GetUserLedgerByLedgerTBId(ctx context.Context, tx *sqlx.Tx, userID int64, ledgerID int64) (*UserLedger, error)
 	ListUserLedgers(ctx context.Context, tx *sqlx.Tx, userID int64) ([]UserLedger, error)
 }
 
@@ -99,12 +101,12 @@ func (r *ledgerRepositoryImpl) UpdateEscrowAccount(ctx context.Context, tx *sqlx
 
 // UserLedger
 
-func (r *ledgerRepositoryImpl) CreateUserLedger(ctx context.Context, tx *sqlx.Tx, userID int64, ledgerID int64, tbAccountID *big.Int, isEscrow bool) (int64, error) {
+func (r *ledgerRepositoryImpl) CreateUserLedger(ctx context.Context, tx *sqlx.Tx, userID int64, ledgerID int64, ledgerTbID int64, tbAccountID *big.Int, isEscrow bool) (int64, error) {
 	var id int64
 	err := tx.QueryRowContext(ctx,
-		`INSERT INTO users_ledger (user_id, ledger_id, tb_account_id, is_escrow)
-         VALUES ($1, $2, $3, $4) RETURNING id`,
-		userID, ledgerID, tbAccountID.String(), isEscrow,
+		`INSERT INTO users_ledger (user_id, ledger_id,ledger_tb_id, tb_account_id, is_escrow)
+         VALUES ($1, $2, $3, $4,$5) RETURNING id`,
+		userID, ledgerID, ledgerTbID, tbAccountID.String(), isEscrow,
 	).Scan(&id)
 	return id, err
 }
@@ -112,10 +114,22 @@ func (r *ledgerRepositoryImpl) CreateUserLedger(ctx context.Context, tx *sqlx.Tx
 func (r *ledgerRepositoryImpl) GetUserLedger(ctx context.Context, tx *sqlx.Tx, userID int64, ledgerID int64) (*UserLedger, error) {
 	var ul UserLedger
 	err := tx.GetContext(ctx, &ul,
-		`SELECT id, user_id, ledger_id, tb_account_id, is_escrow, created_at
+		`SELECT id, user_id, ledger_id, ledger_tb_id, tb_account_id, is_escrow, created_at
          FROM users_ledger 
          WHERE user_id=$1 AND ledger_id=$2`,
 		userID, ledgerID)
+	if err != nil {
+		return nil, err
+	}
+	return &ul, nil
+}
+func (r *ledgerRepositoryImpl) GetUserLedgerByLedgerTBId(ctx context.Context, tx *sqlx.Tx, userID int64, ledgerTbId int64) (*UserLedger, error) {
+	var ul UserLedger
+	err := tx.GetContext(ctx, &ul,
+		`SELECT id, user_id, ledger_id, ledger_tb_id,tb_account_id, is_escrow, created_at
+         FROM users_ledger 
+         WHERE user_id=$1 AND ledger_tb_id=$2`,
+		userID, ledgerTbId)
 	if err != nil {
 		return nil, err
 	}
@@ -125,7 +139,7 @@ func (r *ledgerRepositoryImpl) GetUserLedger(ctx context.Context, tx *sqlx.Tx, u
 func (r *ledgerRepositoryImpl) ListUserLedgers(ctx context.Context, tx *sqlx.Tx, userID int64) ([]UserLedger, error) {
 	var list []UserLedger
 	err := tx.SelectContext(ctx, &list,
-		`SELECT id, user_id, ledger_id, tb_account_id, is_escrow, created_at
+		`SELECT id, user_id, ledger_id, ledger_tb_id, tb_account_id, is_escrow, created_at
          FROM users_ledger 
          WHERE user_id=$1 
          ORDER BY ledger_id`,
