@@ -95,18 +95,14 @@ func (ou *orderUseCaseImpl) AddOrder(ctx context.Context, ticker string, side mo
 	tx := ou.db.MustBeginTx(ctx, nil)
 	defer tx.Rollback()
 
-	tickereLedger, err := (*ou.ledgerRepo).GetLedgerByTicker(ctx, tx, ticker)
-	log.Printf("tickerledger %v err %v", tickereLedger, err)
+	assetTicker, err := (*ou.ledgerRepo).GetLedgerByTicker(ctx, tx, ticker)
+	log.Printf("tickerledger %v err %v", assetTicker, err)
 	if err != nil {
 		return nil, 0, err
 	}
-	tickerID := tickereLedger.ID
+	tickerID := assetTicker.ID
 
 	if orderType == model.ORDER_GOOD_TILL_CANCEL {
-		assetTicker, err := (*ou.ledgerRepo).GetLedgerByID(ctx, tx, tickerID)
-		if err != nil {
-			return nil, 0, fmt.Errorf("failed to get asset ticker: %w", err)
-		}
 		quoteTicker, err := (*ou.ledgerRepo).GetLedgerByTicker(ctx, tx, model.CASH_TICKER) // replace "USD" with your quote currency
 		if err != nil {
 			return nil, 0, fmt.Errorf("failed to get quote ticker: %w", err)
@@ -153,12 +149,13 @@ func (ou *orderUseCaseImpl) AddOrder(ctx context.Context, ticker string, side mo
 			if err != nil {
 				return nil, 0, err
 			}
+			log.Printf("THIS IS RESULT OF ALL %v,%v", userAssetAcct, assetTicker)
 			err = ou.reserveFunds(ctx,
 				userAssetb,
 				tickerEscrow,
 				BigIntToUint128(*assetQty),
 				1002,
-				uint32(userAssetAcct.LedgerID),
+				uint32(userAssetAcct.LedgerTbId),
 			)
 			if err != nil {
 				return nil, 0, fmt.Errorf("asset reservation failed: %w", err)

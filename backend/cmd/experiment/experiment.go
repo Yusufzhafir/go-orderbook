@@ -9,7 +9,7 @@ import (
 	"os/signal"
 	"syscall"
 
-	userLedgerRepository "github.com/Yusufzhafir/go-orderbook/backend/internal/repository/ledger"
+	// userLedgerRepository "github.com/Yusufzhafir/go-orderbook/backend/internal/repository/ledger"
 	// userRepository "github.com/Yusufzhafir/go-orderbook/backend/internal/repository/user"
 	// "github.com/Yusufzhafir/go-orderbook/backend/internal/usecase/user"
 	"github.com/jmoiron/sqlx"
@@ -54,45 +54,41 @@ func main() {
 		return
 	}
 
-	userLedgerRepo := userLedgerRepository.NewLedgerRepository(db)
-
 	rootTx := db.MustBeginTx(rootCtx, nil)
 	defer rootTx.Rollback()
-	escrowAccountId := tbTypes.ID()
-	usdTBLedger := 10
-	errList, err := client.CreateAccounts([]tbTypes.Account{
-		{
-			ID:     escrowAccountId,
-			Code:   1001,
-			Ledger: uint32(usdTBLedger),
-			Flags: tbTypes.AccountFlags{
-				History:                    true,
-				CreditsMustNotExceedDebits: true,
-			}.ToUint16(),
-		},
-	})
-	if err != nil {
-		log.Fatalf("error creating accounts: %v", err)
-	}
-	if len(errList) > 0 {
-		for i, accountError := range errList {
-			log.Printf("on index %d, we got this error: %v", i, accountError)
-		}
-		log.Fatalf("error creating accounts: %v", err)
-	}
+	// errList, err := client.CreateAccounts([]tbTypes.Account{
+	// 	{
+	// 		ID:     escrowAccountId,
+	// 		Code:   1001,
+	// 		Ledger: uint32(usdTBLedger),
+	// 		Flags: tbTypes.AccountFlags{
+	// 			History:                    true,
+	// 			CreditsMustNotExceedDebits: true,
+	// 		}.ToUint16(),
+	// 	},
+	// })
+	// if err != nil {
+	// 	log.Fatalf("error creating accounts: %v", err)
+	// }
+	// if len(errList) > 0 {
+	// 	for i, accountError := range errList {
+	// 		log.Printf("on index %d, we got this error: %v", i, accountError)
+	// 	}
+	// 	log.Fatalf("error creating accounts: %v", err)
+	// }
 
-	ledgers, err := userLedgerRepo.ListLedgers(rootCtx, rootTx)
-	if err != nil {
-		log.Fatalf("error getting ledger list: %v", err)
-		return
+	// ledgers, err := userLedgerRepo.ListLedgers(rootCtx, rootTx)
+	// if err != nil {
+	// 	log.Fatalf("error getting ledger list: %v", err)
+	// 	return
 
-	}
+	// }
 
-	log.Printf("this is existing ledgers in db %v", ledgers)
+	// log.Printf("this is existing ledgers in db %v", ledgers)
 
 	queryResult, err := client.QueryAccounts(
 		tbTypes.QueryFilter{
-			Ledger: uint32(usdTBLedger),
+			Ledger: uint32(20),
 			Limit:  1000,
 		},
 	)
